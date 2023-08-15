@@ -1,4 +1,4 @@
-from xetrack.tracker import Tracker
+from xetrack import Tracker
 import pandas as pd
 import pytest
 from tempfile import NamedTemporaryFile
@@ -36,12 +36,12 @@ def test_track(database):
         tracker.track(**data)
     assert tracker['model'].value_counts().to_dict() == {'xgboost': 2, 'lightgbm': 10}
 
-    assert len(tracker.head()) == len(tracker.tail()) != len(tracker.run()) == len(tracker)
+    assert len(tracker.head()) == len(tracker.tail()) != len(tracker.to_df()) == len(tracker)
 
     new_tracker = Tracker(db=database)
     new_tracker.track_batch([data] * 10)
 
     assert len(new_tracker) == 10
 
-    assert len(new_tracker.all()) == 22
+    assert len(new_tracker.to_df(all=True)) == 22
     tracker._drop_table()
