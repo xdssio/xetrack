@@ -196,7 +196,7 @@ class Tracker:
         for key, value in params.items():
             self.set_param(key, value)
 
-    def __setitem__(self, key, value):
+    def set_value(self, key, value):
         if key not in self._columns:
             self.add_column(key, value, self.to_py_type(value))
         self.conn.execute(

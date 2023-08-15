@@ -28,7 +28,7 @@ def test_track(database):
     assert tracker['model'].iloc[0] == 'lightgbm'
     assert len(tracker['model'].value_counts()) == 1
 
-    tracker['model'] = 'xgboost'
+    tracker.set_value('model', 'xgboost')
     assert tracker['model'].iloc[0] == 'xgboost'
     assert len(tracker['model'].value_counts()) == 1
 
