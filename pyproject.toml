@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "xetrack"
+version = "0.0.1"
+description = ""
+authors = ["xdssio <jonathan@xdss.io>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+duckdb = "^0.8.1"
+pandas = "^2.0.3"
+
+[tool.poetry.extras]
+dev = ["pytest"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+tags = ["machine learning", 'duckdb', 'pandas']
+
