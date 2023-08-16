@@ -5,6 +5,8 @@ from datetime import datetime as dt
 import duckdb
 import pandas as pd
 import logging
+import time
+import psutil
 
 _DTYPES_TO_PYTHON = {
     'BOOLEAN': bool,
@@ -41,7 +43,12 @@ class Tracker:
     def __init__(self, db: str = 'track.db',
                  params=None,
                  reset: bool = False,
-                 verbose: bool = True):
+                 verbose: bool = True,
+                 log_system_params: bool = True,
+                 log_network_params: bool = True,
+                 raise_on_error: bool = True,
+                 measurement_interval: float = 1,
+                 ):
         """
         :param db: The duckdb database file to use or ":memory:" for in-memory database - default is "tracker.db"
         :param params: A dictionary of default parameters to attach to every event - this can be changed later
@@ -58,6 +65,10 @@ class Tracker:
         self.track_id = self.generate_uuid4()
         self.conn = duckdb.connect(self.db)
         self._create_events_table(reset=reset)
+        self.log_system_params = log_system_params
+        self.log_network_params = log_network_params
+        self.raise_on_error = raise_on_error
+        self.measurement_interval = measurement_interval
 
     @staticmethod
     def generate_uuid4():
@@ -126,6 +137,58 @@ class Tracker:
         for values in data:
             self.track(**values)
 
+    @staticmethod
+    def to_mb(bytes: int):
+        return bytes / (1024 * 1024)
+
+    def _to_send_recv(self, net_io_before, net_io_after):
+        sleep_bytes_sent = net_io_after.bytes_sent - net_io_before.bytes_sent
+        sleep_bytes_recv = net_io_after.bytes_recv - net_io_before.bytes_recv
+        return self.to_mb(sleep_bytes_sent), self.to_mb(sleep_bytes_recv)
+
+    def _run_func(self, func: callable, *args, **kwargs):
+        name, error = func.__name__, ''
+        start_func_time = time.time()
+        try:
+            data = func(*args, **kwargs)
+        except Exception as e:
+            if self.raise_on_error:
+                raise e
+            error = f"Error running {name} with {args} and {kwargs} - {e}"
+        if data is not None and type(data) != dict:
+            raise ValueError(f'Function must return a dictionary or None, not {type(data)}')
+        func_time = time.time() - start_func_time
+        if data is None:
+            data = {}
+        data.update({'name': name, 'time': func_time, 'error': error})
+        return data
+
+    def track_function(self, func: callable, *args, **kwargs):
+        """tracking a function which returns a dictionary or parameters to track"""
+        if self.log_network_params:
+            net_io_before = psutil.net_io_counters()
+        if self.log_system_params:
+            stop = count = cpu_usage_sum = ram_usage_sum = disk_usage_sum = 0
+            process = psutil.Process()
+            while stop == 0:
+                count += 1
+                cpu_usage_sum += process.cpu_percent(interval=self.measurement_interval)
+                ram_usage_sum += process.memory_percent()
+                disk_usage_sum += psutil.disk_usage('/').percent
+                data = self._run_func(func, *args, **kwargs)
+                if data is not None:
+                    break
+            data['cpu_usage'] = cpu_usage_sum / count
+            data['ram_usage'] = ram_usage_sum / count
+            data['disk_usage'] = disk_usage_sum / count
+        else:
+            data = self._run_func(func, *args, **kwargs)
+        if self.log_network_params:
+            bytes_sent, bytes_recv = self._to_send_recv(net_io_before, psutil.net_io_counters())
+            data.update({'bytes_sent': bytes_sent, 'bytes_recv': bytes_recv})
+        self.track(**data)
+        return data
+
     def add_column(self, key, value, dtype: type):
         if key not in self._columns:
             self.conn.execute(f"ALTER TABLE {self.table_name} ADD COLUMN {key} {dtype}")
@@ -170,7 +233,7 @@ class Tracker:
         self.conn.execute(
             f"INSERT INTO {self.table_name} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
             list(values))
-        return size
+        return data
 
     def __repr__(self):
         return self.head().__repr__()

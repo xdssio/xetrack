@@ -20,9 +20,10 @@ license = "BSD-3-Clause"
 python = "^3.9"
 duckdb = "^0.8.1"
 pandas = "^2.0.3"
+psutil = "^5.9.5"
 
 [tool.poetry.extras]
-dev = ["pytest"]
+dev = ["pytest", "pyxet"]
 
 [project.urls]
 Homepage = "https://github.com/xdssio/xetrack"
