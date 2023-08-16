@@ -4,6 +4,9 @@ from functools import lru_cache
 import pandas as pd
 import numpy as np
 import os
+import sys
+import requests
+import pytest
 
 pd.set_option('display.max_rows', 500)
 pd.set_option('display.max_columns', 500)
@@ -86,11 +89,18 @@ def delete_large_text():
     return {'result': 0}
 
 
+def read_image():
+    ret = requests.get(
+        'https://images.unsplash.com/photo-1608501078713-8e445a709b39?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80')
+    return {'result': sys.getsizeof(ret.content)}
+
+
+@pytest.mark.skip(reason="Running locally")
 def test_system_tracking():
     tempdir = TemporaryDirectory()
     database = tempdir.name + '/database.db'
     print(database)
-    tracker = Tracker(database, log_system_params=True, log_network_params=False, verbose=True)
+    tracker = Tracker(database, log_system_params=True, log_network_params=True, verbose=True)
 
     n = 10000000
     tracker.track_function(cpu_intensive_function, n)
@@ -103,19 +113,6 @@ def test_system_tracking():
     tracker.track_function(fibonacci_recursive, n)
     tracker.track_function(fibonacci_memoization, n)
     tracker.track_function(fibonacci_tabulation, n)
-    print(tracker.to_df()[['name', 'time', 'memory_percent', 'cpu', 'disk_percent','p_memory_percent']])
 
-
-"""
-import psutil
->>> # blocking
->>> psutil.cpu_percent(interval=1)
-2.0
->>> # non-blocking (percentage since last call)
->>> psutil.cpu_percent(interval=None)
-2.9
->>> # blocking, per-cpu
->>> psutil.cpu_percent(interval=1, percpu=True)
-[2.0, 1.0]
->>>
-"""
+    tracker.track_function(read_image)
+    print(tracker.to_df()[['name', 'time', 'memory_percent', 'cpu', 'disk_percent', 'p_memory_percent']])

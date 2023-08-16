@@ -11,7 +11,7 @@ import multiprocessing
 import time
 import psutil
 
-from xetrack.stats import Stats, average_results
+from xetrack.stats import Stats
 
 _DTYPES_TO_PYTHON = {
     'BOOLEAN': bool,
@@ -176,17 +176,17 @@ class Tracker:
         if self.log_network_params:
             net_io_before = psutil.net_io_counters()
         if self.log_system_params:
+            process = psutil.Process(os.getpid())
             manager = multiprocessing.Manager()
             stop_event = multiprocessing.Event()
-            system_stats = manager.list()
-            stats = Stats(os.getpid(), interval=self.measurement_interval)
-            stats_process = multiprocessing.Process(target=stats.collect_stats, args=(system_stats, stop_event,))
+            stats = Stats(process, stats=manager.dict(), interval=self.measurement_interval)
+            stats_process = multiprocessing.Process(target=stats.collect_stats, args=(stop_event,))
             stats_process.start()
         data = self._run_func(func, *args, **kwargs)
 
         if self.log_system_params:
             stop_event.set()
-            data.update(average_results(system_stats))
+            data.update(stats.get_average_stats())
         if self.log_network_params:
             bytes_sent, bytes_recv = self._to_send_recv(net_io_before, psutil.net_io_counters())
             data.update({'bytes_sent': bytes_sent, 'bytes_recv': bytes_recv})

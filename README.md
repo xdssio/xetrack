@@ -21,7 +21,9 @@ pip install xetrack
 ```python
 from xetrack import Tracker
 
-tracker = Tracker('database.db', params={'model': 'resnet18'}, verbose=False)
+tracker = Tracker('database.db', 
+                  params={'model': 'resnet18'}, 
+                  verbose=False)
 tracker.track(accuracy=0.9, loss=0.1, epoch=1)
 tracker.to_df(all=True)
                                     _id                              track_id                 date     model  loss  epoch  accuracy
@@ -39,6 +41,16 @@ You can also set a value to an entire run with *set_value*:
 ```python
 tracker.set_value('test_accuracy', 0.9)
 ```
+## Track functions
+You can track any function.
+* The function must return a dictionary or None
+```python
+tracker = Tracker('database.db', log_system_params=True, log_network_params=True, measurement_interval=0.1)
+tracker.track_function(read_image, *args, **kwargs)
+{'result': 571084, 'name': 'read_image', 'time': 0.30797290802001953, 'error': '', 'disk_percent': 0.6, 'p_memory_percent': 0.496507, 'cpu': 0.0, 'memory_percent': 32.874608, 'bytes_sent': 0.0078125, 'bytes_recv': 0.583984375}
+```
+
+
 ### Pandas-like
 ```python
 print(tracker)
