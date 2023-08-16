@@ -1,12 +1,17 @@
 import contextlib
+import os
+import subprocess
 from typing import List
 from uuid import uuid4
 from datetime import datetime as dt
 import duckdb
 import pandas as pd
 import logging
+import multiprocessing
 import time
 import psutil
+
+from xetrack.stats import Stats, average_results
 
 _DTYPES_TO_PYTHON = {
     'BOOLEAN': bool,
@@ -26,7 +31,7 @@ _DTYPES_TO_PYTHON = {
     'INTERVAL': str,
     'UUID': str
 }
-
+multiprocessing.set_start_method('fork')
 logger = logging.getLogger(__name__)
 EVENTS = 'events'
 
@@ -148,6 +153,8 @@ class Tracker:
 
     def _run_func(self, func: callable, *args, **kwargs):
         name, error = func.__name__, ''
+        if self.verbose:
+            logger.info(f"Running {name} with {args} and {kwargs}")
         start_func_time = time.time()
         try:
             data = func(*args, **kwargs)
@@ -165,24 +172,21 @@ class Tracker:
 
     def track_function(self, func: callable, *args, **kwargs):
         """tracking a function which returns a dictionary or parameters to track"""
+        stats_process, system_stats = None, []
         if self.log_network_params:
             net_io_before = psutil.net_io_counters()
         if self.log_system_params:
-            stop = count = cpu_usage_sum = ram_usage_sum = disk_usage_sum = 0
-            process = psutil.Process()
-            while stop == 0:
-                count += 1
-                cpu_usage_sum += process.cpu_percent(interval=self.measurement_interval)
-                ram_usage_sum += process.memory_percent()
-                disk_usage_sum += psutil.disk_usage('/').percent
-                data = self._run_func(func, *args, **kwargs)
-                if data is not None:
-                    break
-            data['cpu_usage'] = cpu_usage_sum / count
-            data['ram_usage'] = ram_usage_sum / count
-            data['disk_usage'] = disk_usage_sum / count
-        else:
-            data = self._run_func(func, *args, **kwargs)
+            manager = multiprocessing.Manager()
+            stop_event = multiprocessing.Event()
+            system_stats = manager.list()
+            stats = Stats(os.getpid(), interval=self.measurement_interval)
+            stats_process = multiprocessing.Process(target=stats.collect_stats, args=(system_stats, stop_event,))
+            stats_process.start()
+        data = self._run_func(func, *args, **kwargs)
+
+        if self.log_system_params:
+            stop_event.set()
+            data.update(average_results(system_stats))
         if self.log_network_params:
             bytes_sent, bytes_recv = self._to_send_recv(net_io_before, psutil.net_io_counters())
             data.update({'bytes_sent': bytes_sent, 'bytes_recv': bytes_recv})
@@ -334,3 +338,21 @@ def copy(source: str,
     target.conn.execute("COMMIT TRANSACTION")
     total = target.count_all()
     print(f"Copied {len(results)} events and {new_column_count} new columns. New total is {total} events")
+
+
+"""
+#TODO remove
+# stop = count = cpu_usage_sum = ram_usage_sum = disk_usage_sum = 0
+            # process = psutil.Process()
+            # while stop == 0:
+            #     count += 1
+            #     cpu_usage_sum += process.cpu_percent(interval=self.measurement_interval)
+            #     ram_usage_sum += process.memory_percent()
+            #     disk_usage_sum += psutil.disk_usage('/').percent
+            #     data = self._run_func(func, *args, **kwargs)
+            #     if data is not None:
+            #         break
+            # data['cpu_usage'] = cpu_usage_sum / count
+            # data['ram_usage'] = ram_usage_sum / count
+            # data['disk_usage'] = disk_usage_sum / count
+"""
