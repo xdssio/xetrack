@@ -23,7 +23,7 @@ pandas = "^2.0.3"
 psutil = "^5.9.5"
 
 [tool.poetry.extras]
-dev = ["pytest", "pyxet"]
+dev = ["pytest", "pyxet" ,"loguru"]
 
 [project.urls]
 Homepage = "https://github.com/xdssio/xetrack"

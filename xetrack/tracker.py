@@ -12,7 +12,6 @@ from xetrack.stats import Stats
 from xetrack.connection import DuckDBConnection
 from xetrack.constants import TRACK_ID, TABLE, TIMESTAMP
 
-
 with contextlib.suppress(RuntimeError):
     multiprocessing.set_start_method('fork')
 logger = logging.getLogger(__name__)
@@ -32,7 +31,7 @@ class Tracker(DuckDBConnection):
                  log_network_params: bool = True,
                  raise_on_error: bool = True,
                  measurement_interval: float = 1,
-                 logger = None
+                 logger=None
                  ):
         """
         :param db: The duckdb database file to use or ":memory:" for in-memory database - default is "tracker.db"
@@ -55,6 +54,10 @@ class Tracker(DuckDBConnection):
         if logger is None:
             logger = logging.getLogger(__name__)
         self.logger = logger
+
+    @staticmethod
+    def _is_primitive(value):
+        return type(value) in (int, float, bool, str, bytes, bytearray)
 
     def _create_events_table(self, reset: bool = False):
         if reset:
@@ -87,8 +90,6 @@ class Tracker(DuckDBConnection):
             return 'BOOLEAN'
         return 'VARCHAR'
 
-
-
     def _drop_table(self, ):
         return self.conn.execute(f"DROP TABLE {TABLE}")
 
@@ -103,7 +104,7 @@ class Tracker(DuckDBConnection):
 
     @staticmethod
     def get_timestamp():
-        return dt.now().strftime('%d-%m-%Y %H:%M:%S.%f')[:-3]
+        return dt.now().strftime('%d-%m-%Y %H:%M:%S.%f')[:-2]
 
     # TODO make more efficient
     def track_batch(self, data=List[dict]):
@@ -129,22 +130,26 @@ class Tracker(DuckDBConnection):
             self.logger.info(f"Running {name} with {args} and {kwargs}")
         start_func_time = time.time()
         try:
-            data = func(*args, **kwargs)
+            result = func(*args, **kwargs)
         except Exception as e:
             if self.raise_on_error:
                 raise e
             error = f"Error running {name} with {args} and {kwargs} - {e}"
-        if data is not None and type(data) != dict:
-            raise ValueError(f'Function must return a dictionary or None, not {type(data)}')
         func_time = time.time() - start_func_time
-        if data is None:
-            data = {}
-        data.update({'name': name, 'time': func_time, 'error': error})
+        data = {}
+        if isinstance(result, dict):
+            data.update(result)
+        elif result is None:
+            data['function_result'] = None
+        else:
+            if not self._is_primitive(result):
+                result = str(result)
+            data['function_result'] = result
+        data.update({'name': name, 'time': func_time, 'error': error, 'args': str(list(args)), 'kwargs': str(kwargs)})
         return data
 
-    def track_function(self, func: callable, *args, **kwargs):
+    def track_function(self, func: callable, params: dict = {}, name: str = None, args: list = [], kwargs: dict = {}):
         """tracking a function which returns a dictionary or parameters to track"""
-        stats_process, system_stats = None, []
         if self.log_network_params:
             net_io_before = psutil.net_io_counters()
         if self.log_system_params:
@@ -155,7 +160,9 @@ class Tracker(DuckDBConnection):
             stats_process = multiprocessing.Process(target=stats.collect_stats, args=(stop_event,))
             stats_process.start()
         data = self._run_func(func, *args, **kwargs)
-
+        if name is not None:
+            params['name'] = name
+        data.update(params)
         if self.log_system_params:
             stop_event.set()
             data.update(stats.get_average_stats())
@@ -176,22 +183,23 @@ class Tracker(DuckDBConnection):
         return value
 
     def _validate_data(self, data: dict):
-
         if TIMESTAMP in data and self.verbose:
             self.logger.warning(f"Overriding {TIMESTAMP} - please use another key")
+        if TRACK_ID in data and self.verbose:
+            self.logger.warning(f"Overriding {TRACK_ID} - please use another key")
         new_columns = set(data.keys()) - self._columns
         for key in new_columns:
             self.conn.execute(
                 f"ALTER TABLE {TABLE} ADD COLUMN {key} {self.to_py_type(data[key])}")
             self._columns.add(key)
 
-        data['timestamp'] = self.get_timestamp()
-        data['track_id'] = self.track_id
         for key, value in self.params.items():
             if key not in data:
                 data[key] = value
             elif self.verbose:
                 self.logger.warning(f'Overriding the {key} parameter')
+        data[TIMESTAMP] = self.get_timestamp()
+        data[TRACK_ID] = self.track_id
         return data
 
     def _to_key_values(self, data: dict):
