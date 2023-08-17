@@ -32,6 +32,7 @@ class Tracker(DuckDBConnection):
                  log_network_params: bool = True,
                  raise_on_error: bool = True,
                  measurement_interval: float = 1,
+                 logger = None
                  ):
         """
         :param db: The duckdb database file to use or ":memory:" for in-memory database - default is "tracker.db"
@@ -51,6 +52,9 @@ class Tracker(DuckDBConnection):
         self.log_network_params = log_network_params
         self.raise_on_error = raise_on_error
         self.measurement_interval = measurement_interval
+        if logger is None:
+            logger = logging.getLogger(__name__)
+        self.logger = logger
 
     def _create_events_table(self, reset: bool = False):
         if reset:
@@ -105,7 +109,7 @@ class Tracker(DuckDBConnection):
     def track_batch(self, data=List[dict]):
         if len(data) == 0:
             if self.verbose:
-                logger.warning('No values to track')
+                self.logger.warning('No values to track')
             return data
         for values in data:
             self.track(**values)
@@ -122,7 +126,7 @@ class Tracker(DuckDBConnection):
     def _run_func(self, func: callable, *args, **kwargs):
         name, error = func.__name__, ''
         if self.verbose:
-            logger.info(f"Running {name} with {args} and {kwargs}")
+            self.logger.info(f"Running {name} with {args} and {kwargs}")
         start_func_time = time.time()
         try:
             data = func(*args, **kwargs)
@@ -159,6 +163,8 @@ class Tracker(DuckDBConnection):
             bytes_sent, bytes_recv = self._to_send_recv(net_io_before, psutil.net_io_counters())
             data.update({'bytes_sent': bytes_sent, 'bytes_recv': bytes_recv})
         self.track(**data)
+        if self.verbose:
+            self.logger.info(f"Tracked {data}")
         return data
 
     def add_column(self, key, value, dtype: type):
@@ -166,13 +172,13 @@ class Tracker(DuckDBConnection):
             self.conn.execute(f"ALTER TABLE {TABLE} ADD COLUMN {key} {dtype}")
             self._columns.add(key)
         elif self.verbose:
-            logger.warning(f'Column {key} already exists')
+            self.logger.warning(f'Column {key} already exists')
         return value
 
     def _validate_data(self, data: dict):
 
         if TIMESTAMP in data and self.verbose:
-            logger.warning(f"Overriding {TIMESTAMP} - please use another key")
+            self.logger.warning(f"Overriding {TIMESTAMP} - please use another key")
         new_columns = set(data.keys()) - self._columns
         for key in new_columns:
             self.conn.execute(
@@ -185,7 +191,7 @@ class Tracker(DuckDBConnection):
             if key not in data:
                 data[key] = value
             elif self.verbose:
-                logger.warning(f'Overriding the {key} parameter')
+                self.logger.warning(f'Overriding the {key} parameter')
         return data
 
     def _to_key_values(self, data: dict):
@@ -199,13 +205,15 @@ class Tracker(DuckDBConnection):
         data_size = len(data)
         if data_size == 0:
             if self.verbose:
-                logger.warning('No values to track')
+                self.logger.warning('No values to track')
             return data_size
         data = self._validate_data(data)
         keys, values, size = self._to_key_values(data)
         self.conn.execute(
             f"INSERT INTO {TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
             list(values))
+        if self.verbose:
+            self.logger.info(f"Tracked {data}")
         return data
 
     def __repr__(self):
