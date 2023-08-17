@@ -1,6 +1,5 @@
 import contextlib
 import os
-import subprocess
 from typing import List
 from uuid import uuid4
 from datetime import datetime as dt
@@ -31,7 +30,8 @@ _DTYPES_TO_PYTHON = {
     'INTERVAL': str,
     'UUID': str
 }
-multiprocessing.set_start_method('fork')
+with contextlib.suppress(RuntimeError):
+    multiprocessing.set_start_method('fork')
 logger = logging.getLogger(__name__)
 EVENTS = 'events'
 
@@ -44,6 +44,7 @@ class Tracker:
     ID = '_id'
     TRACK_ID = 'track_id'
     DATE = 'date'
+    DB = 'db'
 
     def __init__(self, db: str = 'track.db',
                  params=None,
@@ -68,12 +69,22 @@ class Tracker:
         self.verbose = verbose
         self._columns = set()
         self.track_id = self.generate_uuid4()
-        self.conn = duckdb.connect(self.db)
+        self.conn = self._init_connection()
         self._create_events_table(reset=reset)
         self.log_system_params = log_system_params
         self.log_network_params = log_network_params
         self.raise_on_error = raise_on_error
         self.measurement_interval = measurement_interval
+
+    def _init_connection(self):
+        conn = duckdb.connect()
+        if 'sqlite_scanner' not in conn.execute("SELECT * FROM duckdb_extensions()").fetchall():
+            conn.install_extension('sqlite')
+        conn.load_extension('sqlite')
+        dbs = conn.execute("PRAGMA database_list").fetchall()
+        if len(dbs) < 2:
+            conn.execute(f"ATTACH '{self.db}' AS {Tracker.DB}")
+        return conn
 
     @staticmethod
     def generate_uuid4():
@@ -98,25 +109,26 @@ class Tracker:
     @property
     def dtypes(self):
         return {column[0]: _DTYPES_TO_PYTHON.get(column[1]) for column in
-                self.conn.execute(f"DESCRIBE {self.table_name}").fetchall()}
+                self.conn.execute(f"DESCRIBE {Tracker.DB}.{self.table_name}").fetchall()}
 
     def _create_events_table(self, reset: bool = False):
         if reset:
-            self.conn.execute(f"DROP TABLE IF EXISTS {self.table_name}")
+            self.conn.execute(f"DROP TABLE IF EXISTS {Tracker.DB}.{self.table_name}")
         self.conn.execute(
-            f"CREATE TABLE IF NOT EXISTS {self.table_name} ({Tracker.ID} VARCHAR PRIMARY KEY,{Tracker.TRACK_ID} VARCHAR, {Tracker.DATE} VARCHAR)")
+            f"CREATE TABLE IF NOT EXISTS {Tracker.DB}.{self.table_name} ({Tracker.ID} VARCHAR PRIMARY KEY,{Tracker.TRACK_ID} VARCHAR, {Tracker.DATE} VARCHAR)")
         self._columns = set(self.dtypes.keys())
         for key, value in self.params.items():
             self.add_column(key, value, self.to_py_type(value))
         self._columns = set(self.dtypes.keys())
 
     def _drop_table(self, ):
-        return self.conn.execute(f"DROP TABLE {self.table_name}")
+        return self.conn.execute(f"DROP TABLE {Tracker.DB}.{self.table_name}")
 
     @property
     def _len(self) -> int:
         return self.conn.execute(
-            f"SELECT COUNT(*) FROM {self.table_name} WHERE {Tracker.TRACK_ID} = '{self.track_id}'").fetchall()[0][0]
+            f"SELECT COUNT(*) FROM {Tracker.DB}.{self.table_name} WHERE {Tracker.TRACK_ID} = '{self.track_id}'").fetchall()[
+            0][0]
 
     def __len__(self):
         return self._len
@@ -195,7 +207,7 @@ class Tracker:
 
     def add_column(self, key, value, dtype: type):
         if key not in self._columns:
-            self.conn.execute(f"ALTER TABLE {self.table_name} ADD COLUMN {key} {dtype}")
+            self.conn.execute(f"ALTER TABLE {Tracker.DB}.{self.table_name} ADD COLUMN {key} {dtype}")
             self._columns.add(key)
         elif self.verbose:
             logger.warning(f'Column {key} already exists')
@@ -207,7 +219,8 @@ class Tracker:
             logger.warning('Overriding _id - please use another key')
         new_columns = set(data.keys()) - self._columns
         for key in new_columns:
-            self.conn.execute(f"ALTER TABLE {self.table_name} ADD COLUMN {key} {self.to_py_type(data[key])}")
+            self.conn.execute(
+                f"ALTER TABLE {Tracker.DB}.{self.table_name} ADD COLUMN {key} {self.to_py_type(data[key])}")
             self._columns.add(key)
         data['_id'] = self.generate_uuid4()
         data['date'] = self.to_datetime(self.now)
@@ -235,7 +248,7 @@ class Tracker:
         data = self._validate_data(data)
         keys, values, size = self._to_key_values(data)
         self.conn.execute(
-            f"INSERT INTO {self.table_name} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
+            f"INSERT INTO {Tracker.DB}.{self.table_name} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
             list(values))
         return data
 
@@ -246,16 +259,16 @@ class Tracker:
         if all:
             return self._table.to_df()
         results = self.conn.execute(
-            f"SELECT * FROM {self.table_name} WHERE {Tracker.TRACK_ID} = '{self.track_id}'").fetchall()
+            f"SELECT * FROM {Tracker.DB}.{self.table_name} WHERE {Tracker.TRACK_ID} = '{self.track_id}'").fetchall()
         return pd.DataFrame(results, columns=self._table.columns)
 
     def __getitem__(self, item):
         if isinstance(item, str):
             results = self.conn.execute(
-                f"SELECT {item} FROM {self.table_name} WHERE {Tracker.TRACK_ID} = '{self.track_id}'").fetchall()
+                f"SELECT {item} FROM {Tracker.DB}.{self.table_name} WHERE {Tracker.TRACK_ID} = '{self.track_id}'").fetchall()
             return pd.Series([res[0] for res in results], name=item)
         elif isinstance(item, int):
-            results = self.conn.execute(f"SELECT * FROM {self.table_name} WHERE _id = {item}").fetchall()
+            results = self.conn.execute(f"SELECT * FROM {Tracker.DB}.{self.table_name} WHERE _id = {item}").fetchall()
             if len(results) == 0:
                 return None
             return {column: value for column, value in zip(self._table.columns, results[0])}
@@ -269,7 +282,7 @@ class Tracker:
         if key not in self._columns:
             self.add_column(key, value, self.to_py_type(value))
         self.conn.execute(
-            f"UPDATE {self.table_name} SET {key} = '{value}' WHERE {Tracker.TRACK_ID} = '{self.track_id}'")
+            f"UPDATE {Tracker.DB}.{self.table_name} SET {key} = '{value}' WHERE {Tracker.TRACK_ID} = '{self.track_id}'")
 
     def set_param(self, key, value):
         self.params[key] = value
@@ -278,12 +291,12 @@ class Tracker:
 
     def head(self, n: int = 5):
         results = self.conn.execute(
-            f"SELECT * FROM {self.table_name} WHERE {Tracker.TRACK_ID} = '{self.track_id}' LIMIT {n}").fetchall()
+            f"SELECT * FROM {Tracker.DB}.{self.table_name} WHERE {Tracker.TRACK_ID} = '{self.track_id}' LIMIT {n}").fetchall()
         return pd.DataFrame(results, columns=self._table.columns)
 
     def tail(self, n: int = 5):
         result = self.conn.execute(
-            f"SELECT * FROM {self.table_name} WHERE {Tracker.TRACK_ID} = '{self.track_id}' ORDER BY _id DESC LIMIT {n}").fetchall()
+            f"SELECT * FROM {Tracker.DB}.{self.table_name} WHERE {Tracker.TRACK_ID} = '{self.track_id}' ORDER BY _id DESC LIMIT {n}").fetchall()
         return pd.DataFrame(reversed(result), columns=self._table.columns)
 
     def count_all(self):
@@ -340,19 +353,15 @@ def copy(source: str,
     print(f"Copied {len(results)} events and {new_column_count} new columns. New total is {total} events")
 
 
-"""
-#TODO remove
-# stop = count = cpu_usage_sum = ram_usage_sum = disk_usage_sum = 0
-            # process = psutil.Process()
-            # while stop == 0:
-            #     count += 1
-            #     cpu_usage_sum += process.cpu_percent(interval=self.measurement_interval)
-            #     ram_usage_sum += process.memory_percent()
-            #     disk_usage_sum += psutil.disk_usage('/').percent
-            #     data = self._run_func(func, *args, **kwargs)
-            #     if data is not None:
-            #         break
-            # data['cpu_usage'] = cpu_usage_sum / count
-            # data['ram_usage'] = ram_usage_sum / count
-            # data['disk_usage'] = disk_usage_sum / count
-"""
+from tempfile import TemporaryDirectory
+
+
+class A: pass
+
+
+tempdir = TemporaryDirectory()
+database = tempdir.name + '/database.db'
+print(database)
+
+tracker = Tracker(database, log_system_params=True, log_network_params=True, verbose=True)
+tracker.track(a=1, b=2, c=3)
