@@ -1,6 +1,5 @@
-import contextlib
 import logging
-
+from xetrack.constants import _DTYPES_TO_PYTHON, TABLE
 import duckdb
 
 EVENTS = 'events'
@@ -26,3 +25,12 @@ class DuckDBConnection:
         if not is_attached:
             conn.execute(f"ATTACH '{self.db}' AS {DB} (TYPE SQLITE)")
         return conn
+
+    @property
+    def columns(self):
+        return set(self.dtypes.keys())
+
+    @property
+    def dtypes(self):
+        return {column[0]: _DTYPES_TO_PYTHON.get(column[1]) for column in
+                self.conn.execute(f"DESCRIBE {TABLE}").fetchall()}

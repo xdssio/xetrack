@@ -19,11 +19,11 @@ def test_track(database):
     assert len(tracker) == 0
 
     data = {'accuracy': 0.9, 'data': "mnist", 'params': {'lr': 0.01, 'epochs': 10}}
-    assert len(tracker.track(**data)) == 7  # data size including the default params
+    assert len(tracker.track(**data)) == 6  # data size including the default params
     assert len(tracker) == len(tracker.to_df()) == len(tracker.to_df(all=True)) == 1
 
     tracker.set_params({"model": 'lightgbm', 'branch': 'main'})
-    assert len(tracker.track(**data)) == 8  # we added another default param
+    assert len(tracker.track(**data)) == 7  # we added another default param
 
     assert tracker['model'].iloc[0] == 'lightgbm'
     assert len(tracker['model'].value_counts()) == 1

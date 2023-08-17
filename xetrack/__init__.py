@@ -20,7 +20,7 @@ def copy(source: str,
 
     # if handle_duplicate not in ('IGNORE', 'REPLACE'):
     #     raise ValueError(f"Invalid handle_duplicate: {handle_duplicate} - Must be either IGNORE or REPLACE")
-    source = Tracker(db=source, )
+    source = Tracker(db=source)
     target = Tracker(db=target, verbose=False)
     results = source.conn.execute(f"SELECT * FROM {TABLE}").fetchall()
     if len(results) == 0:

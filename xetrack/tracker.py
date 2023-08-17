@@ -3,8 +3,6 @@ import os
 from typing import List
 from uuid import uuid4
 from datetime import datetime as dt
-import duckdb
-import pandas as pd
 import logging
 import multiprocessing
 import time
@@ -12,26 +10,9 @@ import psutil
 
 from xetrack.stats import Stats
 from xetrack.connection import DuckDBConnection
-from xetrack.constants import TRACK_ID, TABLE
+from xetrack.constants import TRACK_ID, TABLE, TIMESTAMP
 
-_DTYPES_TO_PYTHON = {
-    'BOOLEAN': bool,
-    'TINYINT': int,
-    'SMALLINT': int,
-    'INTEGER': int,
-    'BIGINT': int,
-    'FLOAT': float,
-    'DOUBLE': float,
-    'VARCHAR': str,
-    'CHAR': str,
-    'BLOB': bytearray,
-    'DATE': str,
-    'TIME': str,
-    'TIMESTAMP': str,
-    'DECIMAL': float,
-    'INTERVAL': str,
-    'UUID': str
-}
+
 with contextlib.suppress(RuntimeError):
     multiprocessing.set_start_method('fork')
 logger = logging.getLogger(__name__)
@@ -42,8 +23,6 @@ class Tracker(DuckDBConnection):
     Tracker class for tracking experiments, benchmarks, and other events.
     You can set params which are always attached to every event, and then track any parameters you want.
     """
-    ID = '_id'
-    DATE = 'date'
 
     def __init__(self, db: str = 'track.db',
                  params=None,
@@ -77,7 +56,7 @@ class Tracker(DuckDBConnection):
         if reset:
             self.conn.execute(f"DROP TABLE IF EXISTS {TABLE}")
         self.conn.execute(
-            f"CREATE TABLE IF NOT EXISTS {TABLE} ({Tracker.ID} VARCHAR PRIMARY KEY, {TRACK_ID} VARCHAR, {Tracker.DATE} VARCHAR)")
+            f"CREATE TABLE IF NOT EXISTS {TABLE} ({TIMESTAMP} VARCHAR PRIMARY KEY, {TRACK_ID} VARCHAR)")
         self.conn.execute("SHOW TABLES").fetchall()
         self._columns = set(self.dtypes.keys())
         for key, value in self.params.items():
@@ -104,10 +83,7 @@ class Tracker(DuckDBConnection):
             return 'BOOLEAN'
         return 'VARCHAR'
 
-    @property
-    def dtypes(self):
-        return {column[0]: _DTYPES_TO_PYTHON.get(column[1]) for column in
-                self.conn.execute(f"DESCRIBE {TABLE}").fetchall()}
+
 
     def _drop_table(self, ):
         return self.conn.execute(f"DROP TABLE {TABLE}")
@@ -122,12 +98,8 @@ class Tracker(DuckDBConnection):
         return self._len
 
     @staticmethod
-    def to_datetime(timestamp):
-        return timestamp.strftime('%d-%m-%Y %H:%M:%S')
-
-    @property
-    def now(self):
-        return dt.now()
+    def get_timestamp():
+        return dt.now().strftime('%d-%m-%Y %H:%M:%S.%f')[:-3]
 
     # TODO make more efficient
     def track_batch(self, data=List[dict]):
@@ -199,15 +171,15 @@ class Tracker(DuckDBConnection):
 
     def _validate_data(self, data: dict):
 
-        if Tracker.ID in data and self.verbose:
-            logger.warning('Overriding _id - please use another key')
+        if TIMESTAMP in data and self.verbose:
+            logger.warning(f"Overriding {TIMESTAMP} - please use another key")
         new_columns = set(data.keys()) - self._columns
         for key in new_columns:
             self.conn.execute(
                 f"ALTER TABLE {TABLE} ADD COLUMN {key} {self.to_py_type(data[key])}")
             self._columns.add(key)
-        data['_id'] = self.generate_uuid4()
-        data['date'] = self.to_datetime(self.now)
+
+        data['timestamp'] = self.get_timestamp()
         data['track_id'] = self.track_id
         for key, value in self.params.items():
             if key not in data:
@@ -278,7 +250,7 @@ class Tracker(DuckDBConnection):
 
     def tail(self, n: int = 5):
         return self.conn.execute(
-            f"SELECT * FROM {TABLE} WHERE {TRACK_ID} = '{self.track_id}' ORDER BY _id DESC LIMIT {n}").df()
+            f"SELECT * FROM {TABLE} WHERE {TRACK_ID} = '{self.track_id}' ORDER BY {TIMESTAMP} DESC LIMIT {n}").df()
 
     def count_all(self):
         return self.conn.execute(
