@@ -4,11 +4,12 @@ import duckdb
 
 from .tracker import Tracker
 from .reader import Reader
+from .constants import TRACK_ID, TABLE
 
 
 def copy(source: str,
          target: str,
-         handle_duplicate: str = "IGNORE",
+         # handle_duplicate: str = "IGNORE",
          ):
     """
     Copies the data from one tracker to another
@@ -17,11 +18,11 @@ def copy(source: str,
     :param handle_duplicate: How to handle duplicate columns - IGNORE or REPLACE
     """
 
-    if handle_duplicate not in ('IGNORE', 'REPLACE'):
-        raise ValueError(f"Invalid handle_duplicate: {handle_duplicate} - Must be either IGNORE or REPLACE")
+    # if handle_duplicate not in ('IGNORE', 'REPLACE'):
+    #     raise ValueError(f"Invalid handle_duplicate: {handle_duplicate} - Must be either IGNORE or REPLACE")
     source = Tracker(db=source, )
     target = Tracker(db=target, verbose=False)
-    results = source.conn.execute(f"SELECT * FROM {source.table_name}").fetchall()
+    results = source.conn.execute(f"SELECT * FROM {TABLE}").fetchall()
     if len(results) == 0:
         print('No data to copy')
         return
@@ -30,14 +31,14 @@ def copy(source: str,
         if column not in target._columns:
             new_column_count += 1
             target.add_column(column, value, source.to_py_type(value))
-    keys = source._table.columns
+    keys = source._columns
     size = len(keys)
     target.conn.execute("BEGIN TRANSACTION")
     for event in results:
         values = list(event)
         with contextlib.suppress(duckdb.ConstraintException):
             target.conn.execute(
-                f"INSERT OR {handle_duplicate} INTO {target.table_name} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
+                f"INSERT INTO {TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
                 values)
     target.conn.execute("COMMIT TRANSACTION")
     total = target.count_all()
