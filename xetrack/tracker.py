@@ -11,7 +11,8 @@ import time
 import psutil
 
 from xetrack.stats import Stats
-from xetrack import DB, EVENTS, TRACK_ID
+from xetrack.connection import DuckDBConnection
+from xetrack.constants import TRACK_ID, TABLE
 
 _DTYPES_TO_PYTHON = {
     'BOOLEAN': bool,
@@ -36,14 +37,13 @@ with contextlib.suppress(RuntimeError):
 logger = logging.getLogger(__name__)
 
 
-class Tracker:
+class Tracker(DuckDBConnection):
     """
     Tracker class for tracking experiments, benchmarks, and other events.
     You can set params which are always attached to every event, and then track any parameters you want.
     """
-    ID = '_id'    
+    ID = '_id'
     DATE = 'date'
-    
 
     def __init__(self, db: str = 'track.db',
                  params=None,
@@ -60,30 +60,29 @@ class Tracker:
         :param reset: If True, the events table will be dropped and recreated - default is False
         :param verbose: If True, log messages will be printed - default is True
         """
+        super().__init__(db=db)
         if params is None:
             params = {}
-        self.db = db
-        self.table_name = EVENTS
         self.params = params
         self.verbose = verbose
-        self._columns = set()
         self.track_id = self.generate_uuid4()
-        self.conn = self._init_connection()
+        self._columns = set()
         self._create_events_table(reset=reset)
         self.log_system_params = log_system_params
         self.log_network_params = log_network_params
         self.raise_on_error = raise_on_error
         self.measurement_interval = measurement_interval
 
-    def _init_connection(self):
-        conn = duckdb.connect()
-        if 'sqlite_scanner' not in conn.execute("SELECT * FROM duckdb_extensions()").fetchall():
-            conn.install_extension('sqlite')
-        conn.load_extension('sqlite')
-        dbs = conn.execute("PRAGMA database_list").fetchall()
-        if len(dbs) < 2:
-            conn.execute(f"ATTACH '{self.db}' AS {DB}")
-        return conn
+    def _create_events_table(self, reset: bool = False):
+        if reset:
+            self.conn.execute(f"DROP TABLE IF EXISTS {TABLE}")
+        self.conn.execute(
+            f"CREATE TABLE IF NOT EXISTS {TABLE} ({Tracker.ID} VARCHAR PRIMARY KEY, {TRACK_ID} VARCHAR, {Tracker.DATE} VARCHAR)")
+        self.conn.execute("SHOW TABLES").fetchall()
+        self._columns = set(self.dtypes.keys())
+        for key, value in self.params.items():
+            self.add_column(key, value, self.to_py_type(value))
+        self._columns = set(self.dtypes.keys())
 
     @staticmethod
     def generate_uuid4():
@@ -108,25 +107,15 @@ class Tracker:
     @property
     def dtypes(self):
         return {column[0]: _DTYPES_TO_PYTHON.get(column[1]) for column in
-                self.conn.execute(f"DESCRIBE {DB}.{self.table_name}").fetchall()}
-
-    def _create_events_table(self, reset: bool = False):
-        if reset:
-            self.conn.execute(f"DROP TABLE IF EXISTS {DB}.{self.table_name}")
-        self.conn.execute(
-            f"CREATE TABLE IF NOT EXISTS {DB}.{self.table_name} ({Tracker.ID} VARCHAR PRIMARY KEY,{TRACK_ID} VARCHAR, {Tracker.DATE} VARCHAR)")
-        self._columns = set(self.dtypes.keys())
-        for key, value in self.params.items():
-            self.add_column(key, value, self.to_py_type(value))
-        self._columns = set(self.dtypes.keys())
+                self.conn.execute(f"DESCRIBE {TABLE}").fetchall()}
 
     def _drop_table(self, ):
-        return self.conn.execute(f"DROP TABLE {DB}.{self.table_name}")
+        return self.conn.execute(f"DROP TABLE {TABLE}")
 
     @property
     def _len(self) -> int:
         return self.conn.execute(
-            f"SELECT COUNT(*) FROM {DB}.{self.table_name} WHERE {TRACK_ID} = '{self.track_id}'").fetchall()[
+            f"SELECT COUNT(*) FROM {TABLE} WHERE {TRACK_ID} = '{self.track_id}'").fetchall()[
             0][0]
 
     def __len__(self):
@@ -139,10 +128,6 @@ class Tracker:
     @property
     def now(self):
         return dt.now()
-
-    @property
-    def _table(self):
-        return self.conn.table(self.table_name)
 
     # TODO make more efficient
     def track_batch(self, data=List[dict]):
@@ -206,7 +191,7 @@ class Tracker:
 
     def add_column(self, key, value, dtype: type):
         if key not in self._columns:
-            self.conn.execute(f"ALTER TABLE {DB}.{self.table_name} ADD COLUMN {key} {dtype}")
+            self.conn.execute(f"ALTER TABLE {TABLE} ADD COLUMN {key} {dtype}")
             self._columns.add(key)
         elif self.verbose:
             logger.warning(f'Column {key} already exists')
@@ -219,7 +204,7 @@ class Tracker:
         new_columns = set(data.keys()) - self._columns
         for key in new_columns:
             self.conn.execute(
-                f"ALTER TABLE {DB}.{self.table_name} ADD COLUMN {key} {self.to_py_type(data[key])}")
+                f"ALTER TABLE {TABLE} ADD COLUMN {key} {self.to_py_type(data[key])}")
             self._columns.add(key)
         data['_id'] = self.generate_uuid4()
         data['date'] = self.to_datetime(self.now)
@@ -247,7 +232,7 @@ class Tracker:
         data = self._validate_data(data)
         keys, values, size = self._to_key_values(data)
         self.conn.execute(
-            f"INSERT INTO {DB}.{self.table_name} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
+            f"INSERT INTO {TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
             list(values))
         return data
 
@@ -255,22 +240,21 @@ class Tracker:
         return self.head().__repr__()
 
     def to_df(self, all: bool = False):
-        if all:
-            return self._table.to_df()
-        results = self.conn.execute(
-            f"SELECT * FROM {DB}.{self.table_name} WHERE {TRACK_ID} = '{self.track_id}'").fetchall()
-        return pd.DataFrame(results, columns=self._table.columns)
+        query = f"SELECT * FROM {TABLE}"
+        if not all:
+            query += f" WHERE {TRACK_ID} = '{self.track_id}'"
+        return self.conn.execute(query).df()
 
     def __getitem__(self, item):
         if isinstance(item, str):
-            results = self.conn.execute(
-                f"SELECT {item} FROM {DB}.{self.table_name} WHERE {TRACK_ID} = '{self.track_id}'").fetchall()
-            return pd.Series([res[0] for res in results], name=item)
+            return self.conn.execute(f"SELECT {item} FROM {TABLE} WHERE {TRACK_ID} = '{self.track_id}'").df()[
+                item]
+
         elif isinstance(item, int):
-            results = self.conn.execute(f"SELECT * FROM {DB}.{self.table_name} WHERE _id = {item}").fetchall()
+            results = self.conn.execute(f"SELECT * FROM {TABLE} WHERE {Tracker.ID} = {item}").df()
             if len(results) == 0:
                 return None
-            return {column: value for column, value in zip(self._table.columns, results[0])}
+            return results.iloc[0].to_dict()
         raise ValueError(f"Invalid type: {type(item)}")
 
     def set_params(self, params: dict):
@@ -281,7 +265,7 @@ class Tracker:
         if key not in self._columns:
             self.add_column(key, value, self.to_py_type(value))
         self.conn.execute(
-            f"UPDATE {DB}.{self.table_name} SET {key} = '{value}' WHERE {TRACK_ID} = '{self.track_id}'")
+            f"UPDATE {TABLE} SET {key} = '{value}' WHERE {TRACK_ID} = '{self.track_id}'")
 
     def set_param(self, key, value):
         self.params[key] = value
@@ -289,17 +273,17 @@ class Tracker:
         return key
 
     def head(self, n: int = 5):
-        results = self.conn.execute(
-            f"SELECT * FROM {DB}.{self.table_name} WHERE {TRACK_ID} = '{self.track_id}' LIMIT {n}").fetchall()
-        return pd.DataFrame(results, columns=self._table.columns)
+        return self.conn.execute(
+            f"SELECT * FROM {TABLE} WHERE {TRACK_ID} = '{self.track_id}' LIMIT {n}").df()
 
     def tail(self, n: int = 5):
-        result = self.conn.execute(
-            f"SELECT * FROM {DB}.{self.table_name} WHERE {TRACK_ID} = '{self.track_id}' ORDER BY _id DESC LIMIT {n}").fetchall()
-        return pd.DataFrame(reversed(result), columns=self._table.columns)
+        return self.conn.execute(
+            f"SELECT * FROM {TABLE} WHERE {TRACK_ID} = '{self.track_id}' ORDER BY _id DESC LIMIT {n}").df()
 
     def count_all(self):
-        return len(self._table)
+        return self.conn.execute(
+            f"SELECT COUNT(*) FROM {TABLE}").fetchall()[
+            0][0]
 
     def count_run(self):
         return self._len
@@ -313,51 +297,3 @@ class Tracker:
 
     def to_parquet(self, path: str, all: bool = False):
         return self.to_df(all).to_parquet(path, index=False)
-
-
-def copy(source: str,
-         target: str,
-         handle_duplicate: str = "IGNORE",
-         ):
-    """
-    Copies the data from one tracker to another
-    :param source: The source database file
-    :param target: The target database file
-    :param handle_duplicate: How to handle duplicate columns - IGNORE or REPLACE
-    """
-    if handle_duplicate not in ('IGNORE', 'REPLACE'):
-        raise ValueError(f"Invalid handle_duplicate: {handle_duplicate} - Must be either IGNORE or REPLACE")
-    source = Tracker(db=source, )
-    target = Tracker(db=target, verbose=False)
-    results = source.conn.execute(f"SELECT * FROM {source.table_name}").fetchall()
-    if len(results) == 0:
-        print('No data to copy')
-        return
-    new_column_count = 0
-    for column, value in source.dtypes.items():
-        if column not in target._columns:
-            new_column_count += 1
-            target.add_column(column, value, source.to_py_type(value))
-    keys = source._table.columns
-    size = len(keys)
-    target.conn.execute("BEGIN TRANSACTION")
-    for event in results:
-        values = list(event)
-        with contextlib.suppress(duckdb.ConstraintException):
-            target.conn.execute(
-                f"INSERT OR {handle_duplicate} INTO {target.table_name} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
-                values)
-    target.conn.execute("COMMIT TRANSACTION")
-    total = target.count_all()
-    print(f"Copied {len(results)} events and {new_column_count} new columns. New total is {total} events")
-
-
-from tempfile import TemporaryDirectory
-
-
-tempdir = TemporaryDirectory()
-database = tempdir.name + '/database.db'
-print(database)
-
-tracker = Tracker(database, log_system_params=True, log_network_params=True, verbose=True)
-tracker.track(a=1, b=2, c=3)
