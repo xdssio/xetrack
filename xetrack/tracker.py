@@ -7,6 +7,7 @@ import logging
 import multiprocessing
 import time
 import psutil
+import re
 
 from xetrack.stats import Stats
 from xetrack.connection import DuckDBConnection
@@ -15,6 +16,8 @@ from xetrack.constants import TRACK_ID, TABLE, TIMESTAMP
 with contextlib.suppress(RuntimeError):
     multiprocessing.set_start_method('fork')
 logger = logging.getLogger(__name__)
+
+ALPHANUMERIC = re.compile(r'[^a-zA-Z0-9_]')
 
 
 class Tracker(DuckDBConnection):
@@ -200,11 +203,24 @@ class Tracker(DuckDBConnection):
             self.logger.warning(f'Column {key} already exists')
         return value
 
+    def _to_valid_key(self, key):
+        key = str(key)
+        key = ALPHANUMERIC.sub('_', key)
+
+        if ALPHANUMERIC.match(key[0]) is not None:
+            key = '_' + key
+
+        # Truncate the name if needed
+        max_length = 64
+        key = key[:max_length]
+        return key
+
     def _validate_data(self, data: dict):
         if TIMESTAMP in data and self.verbose:
             self.logger.warning(f"Overriding {TIMESTAMP} - please use another key")
         if TRACK_ID in data and self.verbose:
             self.logger.warning(f"Overriding {TRACK_ID} - please use another key")
+        data = {self._to_valid_key(key): value for key, value in data.items()}
         new_columns = set(data.keys()) - self._columns
         for key in new_columns:
             self.conn.execute(
