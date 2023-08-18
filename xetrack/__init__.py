@@ -9,13 +9,11 @@ from .constants import TRACK_ID, TABLE
 
 def copy(source: str,
          target: str,
-         # handle_duplicate: str = "IGNORE",
          ):
     """
     Copies the data from one tracker to another
     :param source: The source database file
     :param target: The target database file
-    :param handle_duplicate: How to handle duplicate columns - IGNORE or REPLACE
     """
 
     # if handle_duplicate not in ('IGNORE', 'REPLACE'):
@@ -31,7 +29,7 @@ def copy(source: str,
         if column not in target._columns:
             new_column_count += 1
             target.add_column(column, value, source.to_py_type(value))
-    keys = source._columns
+    keys = [column[1] for column in source.conn.execute(f"PRAGMA table_info({TABLE})").fetchall()]
     size = len(keys)
     target.conn.execute("BEGIN TRANSACTION")
     for event in results:

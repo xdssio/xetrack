@@ -104,7 +104,7 @@ class Tracker(DuckDBConnection):
 
     @staticmethod
     def get_timestamp():
-        return dt.now().strftime('%d-%m-%Y %H:%M:%S.%f')[:-2]
+        return dt.now().strftime('%d-%m-%Y %H:%M:%S.%f')
 
     # TODO make more efficient
     def track_batch(self, data=List[dict]):
@@ -125,16 +125,15 @@ class Tracker(DuckDBConnection):
         return self.to_mb(sleep_bytes_sent), self.to_mb(sleep_bytes_recv)
 
     def _run_func(self, func: callable, *args, **kwargs):
-        name, error = func.__name__, ''
+        name, error, exception = func.__name__, '', None
         if self.verbose:
             self.logger.info(f"Running {name} with {args} and {kwargs}")
         start_func_time = time.time()
         try:
             result = func(*args, **kwargs)
         except Exception as e:
-            if self.raise_on_error:
-                raise e
-            error = f"Error running {name} with {args} and {kwargs} - {e}"
+            exception = e
+            error = str(e)
         func_time = time.time() - start_func_time
         data = {}
         if isinstance(result, dict):
@@ -146,7 +145,7 @@ class Tracker(DuckDBConnection):
                 result = str(result)
             data['function_result'] = result
         data.update({'name': name, 'time': func_time, 'error': error, 'args': str(list(args)), 'kwargs': str(kwargs)})
-        return data
+        return data, result, exception
 
     def track_function(self, func: callable, params: dict = {}, name: str = None, args: list = [], kwargs: dict = {}):
         """tracking a function which returns a dictionary or parameters to track"""
@@ -159,7 +158,7 @@ class Tracker(DuckDBConnection):
             stats = Stats(process, stats=manager.dict(), interval=self.measurement_interval)
             stats_process = multiprocessing.Process(target=stats.collect_stats, args=(stop_event,))
             stats_process.start()
-        data = self._run_func(func, *args, **kwargs)
+        data, result, exception = self._run_func(func, *args, **kwargs)
         if name is not None:
             params['name'] = name
         data.update(params)
@@ -172,7 +171,9 @@ class Tracker(DuckDBConnection):
         self.track(**data)
         if self.verbose:
             self.logger.info(f"Tracked {data}")
-        return data
+        if exception is not None and self.raise_on_error:
+            raise exception
+        return result
 
     def add_column(self, key, value, dtype: type):
         if key not in self._columns:
