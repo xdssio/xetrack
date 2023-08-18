@@ -1,17 +1,13 @@
 from xetrack import Tracker
-import pandas as pd
 import pytest
 from tempfile import NamedTemporaryFile
-
-pd.set_option('display.max_rows', 500)
-pd.set_option('display.max_columns', 500)
-pd.set_option('display.width', 1000)
 
 
 @pytest.fixture
 def database():
     temp = NamedTemporaryFile()
-    return temp.name
+    database = temp.name
+    return database
 
 
 def test_track(database):
@@ -19,11 +15,12 @@ def test_track(database):
     assert len(tracker) == 0
 
     data = {'accuracy': 0.9, 'data': "mnist", 'params': {'lr': 0.01, 'epochs': 10}}
-    assert len(tracker.track(**data)) == 6  # data size including the default params
+    results = tracker.log(**data)
+    assert len(results) == 6  # data size including the default params
+    assert tracker.last == results
     assert len(tracker) == len(tracker.to_df()) == len(tracker.to_df(all=True)) == 1
-
     tracker.set_params({"model": 'lightgbm', 'branch': 'main'})
-    assert len(tracker.track(**data)) == 7  # we added another default param
+    assert len(tracker.log(**data)) == 7  # we added another default param
 
     assert tracker['model'].iloc[0] == 'lightgbm'
     assert len(tracker['model'].value_counts()) == 1
@@ -33,7 +30,7 @@ def test_track(database):
     assert len(tracker['model'].value_counts()) == 1
 
     for i in range(10):
-        tracker.track(**data)
+        tracker.log(**data)
     assert tracker['model'].value_counts().to_dict() == {'xgboost': 2, 'lightgbm': 10}
 
     assert len(tracker.head()) == len(tracker.tail()) != len(tracker.to_df()) == len(tracker)

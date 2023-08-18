@@ -10,6 +10,7 @@ Each instance of the tracker has a "track_id" which is a unique identifier for a
 * Fast
 * Pandas-like
 * SQL-like
+* Multiprocessing reads and writes
 
 ## Installation
 ```bash
@@ -21,33 +22,49 @@ pip install xetrack
 ```python
 from xetrack import Tracker
 
-tracker = Tracker('database.db', 
-                  params={'model': 'resnet18'}, 
+tracker = Tracker('database.db',
+                  params={'model': 'resnet18'},
                   verbose=False)
-tracker.track(accuracy=0.9, loss=0.1, epoch=1)
-tracker.to_df(all=True)
-                                    _id                              track_id                 date     model  loss  epoch  accuracy
-0  3adfc3ca-e7a0-4955-a7c7-2dae1a2552e4  e5324c93-25b1-4344-a1e1-0b47e95761aa  16-08-2023 00:43:38  resnet18   0.1      1       0.9
+tracker.log(accuracy=0.9, loss=0.1, epoch=1)
+tracker.last
+{'accuracy': 0.9, 'loss': 0.1, 'epoch': 1, 'model': 'resnet18', 'timestamp': '18-08-2023 11:02:35.162360', 'track_id': 'cd8afc54-5992-4828-893d-a4cada28dba5'}
+
+tracker.to_df(all=True) # all runs
+                    timestamp                              track_id     model  accuracy  epoch  loss
+0  18-08-2023 10:43:34.599687  961ae844-203f-4be2-ae3c-907afce3a1b0  resnet18       0.9      1   0.1
 
 ```
-Params are values which are added to every feature row:
+Params are values which are added to every future row:
 
 ```python
 tracker.set_params({'model': 'resnet18', 'dataset': 'cifar10'})
 ```
 
-You can also set a value to an entire run with *set_value*:
+You can also set a value to an entire run with *set_value* ("back in time"):
 
 ```python
 tracker.set_value('test_accuracy', 0.9)
 ```
+
 ## Track functions
 You can track any function.
 * The function must return a dictionary or None
+
 ```python
 tracker = Tracker('database.db', log_system_params=True, log_network_params=True, measurement_interval=0.1)
-tracker.track_function(read_image, *args, **kwargs)
-{'result': 571084, 'name': 'read_image', 'time': 0.30797290802001953, 'error': '', 'disk_percent': 0.6, 'p_memory_percent': 0.496507, 'cpu': 0.0, 'memory_percent': 32.874608, 'bytes_sent': 0.0078125, 'bytes_recv': 0.583984375}
+image = tracker.track(read_image, *args, **kwargs)
+tracker.last
+{'result': 571084, 'name': 'read_image', 'time': 0.30797290802001953, 'error': '', 'disk_percent': 0.6,
+ 'p_memory_percent': 0.496507, 'cpu': 0.0, 'memory_percent': 32.874608, 'bytes_sent': 0.0078125,
+ 'bytes_recv': 0.583984375}
+```
+Or with a wrapper:
+```python
+
+@tracker.wrap(name='foofoo')
+def foo(a: int, b: str):
+    return a + len(b)
+{'function_result': 6, 'name': 'foofoo', 'time': 7.867813110351562e-06, 'error': '', 'args': "[1, 'hello']", 'kwargs': '{}', 'disk_percent': 0, 'p_memory_percent': 0, 'cpu': 0, 'memory_percent': 0, 'bytes_sent': 0.0, 'bytes_recv': 0.0, 'model': 'lightgbm', 'timestamp': '18-08-2023 10:59:26.011938', 'track_id': 'a6f99e21-dfd8-4056-98e5-46b2a76fab41'}
 ```
 
 
@@ -65,23 +82,21 @@ tracker.to_df() # get pandas dataframe of current run
 
 ### SQL-like
 You can filter the data using SQL-like syntax using [duckdb](https://duckdb.org/docs):
+* The sqlite database is attached as **db** and the table is **events**
 ```python
-tracker.conn.execute(f"SELECT * FROM {tracker.table_name} WHERE accuracy > 0.8").fetchall()
+tracker.conn.execute(f"SELECT * FROM db.events WHERE accuracy > 0.8").fetchall()
 ```
 
 ## Analysis
 To get the data of all runs in the database for analysis:   
 Use this for further analysis and plotting.
+* This works even while a another process is writing to the database.
 
 ```python
-# retrieve all runs data
-df = Tracker('database.db').to_df(all=True) 
+from xetrack import Reader
+df = Reader('database.db').to_df() 
 ```
-### Export
-```python
-tracker.to_csv('tracker.csv', all=False)
-tracker.to_parquet('tracker.parquet', all=True)
-```
+
 ## Merge two databases
 If you have two databases, and you want to merge them into one, you can use the copy function:
 ```bash

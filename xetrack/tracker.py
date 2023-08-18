@@ -54,6 +54,7 @@ class Tracker(DuckDBConnection):
         if logger is None:
             logger = logging.getLogger(__name__)
         self.logger = logger
+        self.last = None
 
     @staticmethod
     def _is_primitive(value):
@@ -113,7 +114,7 @@ class Tracker(DuckDBConnection):
                 self.logger.warning('No values to track')
             return data
         for values in data:
-            self.track(**values)
+            self.log(**values)
 
     @staticmethod
     def to_mb(bytes: int):
@@ -147,7 +148,23 @@ class Tracker(DuckDBConnection):
         data.update({'name': name, 'time': func_time, 'error': error, 'args': str(list(args)), 'kwargs': str(kwargs)})
         return data, result, exception
 
-    def track_function(self, func: callable, params: dict = {}, name: str = None, args: list = [], kwargs: dict = {}):
+    def wrap(self, name: str = None, params: dict = {}):
+        """wraps a function to track it's execution time and parameters"""
+        parent_tracker = self
+
+        class TrackDecorator:
+            def __init__(self, func):
+                self.func = func
+                self.name = name
+                self.params = params
+                self.tracker = parent_tracker
+
+            def __call__(self, *args, **kwargs):
+                return self.tracker.track(self.func, params=self.params, name=self.name, args=args, kwargs=kwargs)
+
+        return TrackDecorator
+
+    def track(self, func: callable, params: dict = {}, name: str = None, args: list = [], kwargs: dict = {}):
         """tracking a function which returns a dictionary or parameters to track"""
         if self.log_network_params:
             net_io_before = psutil.net_io_counters()
@@ -168,7 +185,7 @@ class Tracker(DuckDBConnection):
         if self.log_network_params:
             bytes_sent, bytes_recv = self._to_send_recv(net_io_before, psutil.net_io_counters())
             data.update({'bytes_sent': bytes_sent, 'bytes_recv': bytes_recv})
-        self.track(**data)
+        self.log(**data)
         if self.verbose:
             self.logger.info(f"Tracked {data}")
         if exception is not None and self.raise_on_error:
@@ -210,7 +227,7 @@ class Tracker(DuckDBConnection):
             values.append(value)
         return keys, values, i + 1
 
-    def track(self, **data: dict) -> int:
+    def log(self, **data: dict) -> int:
         data_size = len(data)
         if data_size == 0:
             if self.verbose:
@@ -223,6 +240,7 @@ class Tracker(DuckDBConnection):
             list(values))
         if self.verbose:
             self.logger.info(f"Tracked {data}")
+        self.last = data
         return data
 
     def __repr__(self):

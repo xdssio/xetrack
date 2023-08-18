@@ -18,7 +18,7 @@ def test_reader():
     tempfile = NamedTemporaryFile()
     database = tempfile.name
     tracker = Tracker(database)
-    tracker.track(a=1, b=2)
+    tracker.log(a=1, b=2)
     stats_process = mp.Process(target=read_db, args=(database,))
     stats_process.start()
     stats_process.join()

@@ -103,16 +103,16 @@ def test_system_tracking():
     tracker = Tracker(database, log_system_params=True, log_network_params=True, verbose=True)
 
     n = 10000000
-    tracker.track_function(cpu_intensive_function, n)
-    tracker.track_function(memory_intensive_function, n)
-    tracker.track_function(ram_intensive_function)
-    tracker.track_function(space_intensive_function, n)
-    tracker.track_function(delete_large_text)
+    tracker.track(cpu_intensive_function, n)
+    tracker.track(memory_intensive_function, n)
+    tracker.track(ram_intensive_function)
+    tracker.track(space_intensive_function, n)
+    tracker.track(delete_large_text)
 
     n = 35
-    tracker.track_function(fibonacci_recursive, n)
-    tracker.track_function(fibonacci_memoization, n)
-    tracker.track_function(fibonacci_tabulation, n)
+    tracker.track(fibonacci_recursive, n)
+    tracker.track(fibonacci_memoization, n)
+    tracker.track(fibonacci_tabulation, n)
 
-    tracker.track_function(read_image)
+    tracker.track(read_image)
     print(tracker.to_df()[['name', 'time', 'memory_percent', 'cpu', 'disk_percent', 'p_memory_percent']])
