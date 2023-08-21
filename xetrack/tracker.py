@@ -57,7 +57,7 @@ class Tracker(DuckDBConnection):
         if logger is None:
             logger = logging.getLogger(__name__)
         self.logger = logger
-        self.last = None
+        self.latest = None
 
     @staticmethod
     def _is_primitive(value):
@@ -256,7 +256,7 @@ class Tracker(DuckDBConnection):
             list(values))
         if self.verbose:
             self.logger.info(f"Tracked {data}")
-        self.last = data
+        self.latest = data
         return data
 
     def __repr__(self):

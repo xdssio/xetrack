@@ -17,7 +17,7 @@ def test_track(database):
     data = {'accuracy': 0.9, 'data': "mnist", 'params': {'lr': 0.01, 'epochs': 10}}
     results = tracker.log(**data)
     assert len(results) == 6  # data size including the default params
-    assert tracker.last == results
+    assert tracker.latest == results
     assert len(tracker) == len(tracker.to_df()) == len(tracker.to_df(all=True)) == 1
     tracker.set_params({"model": 'lightgbm', 'branch': 'main'})
     assert len(tracker.log(**data)) == 7  # we added another default param

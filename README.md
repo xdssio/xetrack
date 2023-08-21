@@ -26,12 +26,14 @@ tracker = Tracker('database.db',
                   params={'model': 'resnet18'},
                   verbose=False)
 tracker.log(accuracy=0.9, loss=0.1, epoch=1)
-tracker.last
-{'accuracy': 0.9, 'loss': 0.1, 'epoch': 1, 'model': 'resnet18', 'timestamp': '18-08-2023 11:02:35.162360', 'track_id': 'cd8afc54-5992-4828-893d-a4cada28dba5'}
+tracker.latest
+{'accuracy': 0.9, 'loss': 0.1, 'epoch': 1, 'model': 'resnet18', 'timestamp': '18-08-2023 11:02:35.162360',
+ 'track_id': 'cd8afc54-5992-4828-893d-a4cada28dba5'}
 
-tracker.to_df(all=True) # all runs
-                    timestamp                              track_id     model  accuracy  epoch  loss
-0  18-08-2023 10:43:34.599687  961ae844-203f-4be2-ae3c-907afce3a1b0  resnet18       0.9      1   0.1
+tracker.to_df(all=True)  # all runs as dataframe
+                    timestamp                              track_id     model  accuracy  loss  epoch
+0  21-08-2023 11:32:55.433332  9066505b-4a09-4946-ae4a-c3c957720bba  resnet18       0.9   0.1      1
+1  21-08-2023 11:33:01.302282  d4f5c4b7-e372-4d54-9a30-2d8a774fe9cc  resnet18       0.9   0.1      1
 
 ```
 Params are values which are added to every future row:
@@ -53,7 +55,7 @@ You can track any function.
 ```python
 tracker = Tracker('database.db', log_system_params=True, log_network_params=True, measurement_interval=0.1)
 image = tracker.track(read_image, *args, **kwargs)
-tracker.last
+tracker.latest
 {'result': 571084, 'name': 'read_image', 'time': 0.30797290802001953, 'error': '', 'disk_percent': 0.6,
  'p_memory_percent': 0.496507, 'cpu': 0.0, 'memory_percent': 32.874608, 'bytes_sent': 0.0078125,
  'bytes_recv': 0.583984375}

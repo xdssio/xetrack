@@ -11,7 +11,9 @@ pd.set_option('display.width', 1000)
 
 def read_db(database):
     reader = Reader(database)
-    assert len(reader.to_df()) == 1
+    assert len(reader.to_df()) == 2
+
+    assert len(reader.latest()) == 1
 
 
 def test_reader():
@@ -19,6 +21,8 @@ def test_reader():
     database = tempfile.name
     tracker = Tracker(database)
     tracker.log(a=1, b=2)
+    tracker = Tracker(database)
+    tracker.log(a=1, c=2)
     stats_process = mp.Process(target=read_db, args=(database,))
     stats_process.start()
     stats_process.join()

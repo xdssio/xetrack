@@ -29,5 +29,5 @@ def test_wrapper():
 
     result = foo(1, 'hello')
 
-    assert tracker.last['function_result'] == result
-    assert tracker.last['name'] == 'foofoo'
+    assert tracker.latest['function_result'] == result
+    assert tracker.latest['name'] == 'foofoo'
