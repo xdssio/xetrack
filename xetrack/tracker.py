@@ -320,3 +320,6 @@ class Tracker(DuckDBConnection):
 
     def to_parquet(self, path: str, all: bool = False):
         return self.to_df(all).to_parquet(path, index=False)
+
+    def watch(self, triggers: List[str], appendixes: List[str] = None):
+        pass
