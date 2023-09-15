@@ -129,7 +129,7 @@ class Tracker(DuckDBConnection):
         return self.to_mb(sleep_bytes_sent), self.to_mb(sleep_bytes_recv)
 
     def _run_func(self, func: callable, *args, **kwargs):
-        name, error, exception = func.__name__, '', None
+        name, error, exception, result = func.__name__, '', None, None
         if self.verbose:
             self.logger.info(f"Running {name} with {args} and {kwargs}")
         start_func_time = time.time()
@@ -167,8 +167,14 @@ class Tracker(DuckDBConnection):
 
         return TrackDecorator
 
-    def track(self, func: callable, params: dict = {}, name: str = None, args: list = [], kwargs: dict = {}):
+    def track(self, func: callable, params: dict = None, name: str = None, args: list = None, kwargs: dict = None):
         """tracking a function which returns a dictionary or parameters to track"""
+        if params is None:
+            params = {}
+        if args is None:
+            args = []
+        if kwargs is None:
+            kwargs = {}
         if self.log_network_params:
             net_io_before = psutil.net_io_counters()
         if self.log_system_params:
