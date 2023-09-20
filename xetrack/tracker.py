@@ -1,5 +1,6 @@
 import contextlib
 import os
+import typing
 from typing import List
 from uuid import uuid4
 from datetime import datetime as dt
@@ -15,7 +16,12 @@ from xetrack.constants import TRACK_ID, TABLE, TIMESTAMP
 
 with contextlib.suppress(RuntimeError):
     multiprocessing.set_start_method('fork')
-logger = logging.getLogger(__name__)
+
+default_logger = logging.getLogger(__name__)
+with contextlib.suppress(ImportError):
+    import loguru
+
+    default_logger = loguru.logger
 
 ALPHANUMERIC = re.compile(r'[^a-zA-Z0-9_]')
 
@@ -37,10 +43,18 @@ class Tracker(DuckDBConnection):
                  logger=None
                  ):
         """
-        :param db: The duckdb database file to use or ":memory:" for in-memory database - default is "tracker.db"
-        :param params: A dictionary of default parameters to attach to every event - this can be changed later
-        :param reset: If True, the events table will be dropped and recreated - default is False
-        :param verbose: If True, log messages will be printed - default is True
+        Initializes the class instance.
+
+        :param db: The duckdb database file to use or ":memory:" for in-memory database.
+                   Default is "track.db".
+        :param params: A dictionary of default parameters to attach to every event. This can be changed later.
+        :param reset: If True, the events table will be dropped and recreated. Default is False.
+        :param verbose: If True, log messages will be printed. Default is True.
+        :param log_system_params: If True, system parameters will be logged. Default is True.
+        :param log_network_params: If True, network parameters will be logged. Default is True.
+        :param raise_on_error: If True, an error will be raised on failure. Default is True.
+        :param measurement_interval: The interval in seconds at which to measure events. Default is 1.
+        :param logger: The logger to use for logging. If None, the default logger will be used.
         """
         super().__init__(db=db)
         if params is None:
@@ -54,13 +68,20 @@ class Tracker(DuckDBConnection):
         self.log_network_params = log_network_params
         self.raise_on_error = raise_on_error
         self.measurement_interval = measurement_interval
-        if logger is None:
-            logger = logging.getLogger(__name__)
-        self.logger = logger
+        self.logger = logger or default_logger
         self.latest = None
 
     @staticmethod
-    def _is_primitive(value):
+    def _is_primitive(value: object) -> bool:
+        """
+        Check if the given value is a primitive data type.
+
+        Args:
+            value: The value to be checked.
+
+        Returns:
+            bool: True if the value is a primitive data type, False otherwise.
+        """
         return type(value) in (int, float, bool, str, bytes, bytearray)
 
     def _create_events_table(self, reset: bool = False):
@@ -94,7 +115,7 @@ class Tracker(DuckDBConnection):
             return 'BOOLEAN'
         return 'VARCHAR'
 
-    def _drop_table(self, ):
+    def _drop_table(self):
         return self.conn.execute(f"DROP TABLE {TABLE}")
 
     @property
@@ -121,17 +142,78 @@ class Tracker(DuckDBConnection):
 
     @staticmethod
     def to_mb(bytes: int):
+        """
+        Convert a given number of bytes to megabytes.
+
+        Args:
+            bytes (int): The number of bytes to convert.
+
+        Returns:
+            float: The equivalent number of megabytes.
+        """
         return bytes / (1024 * 1024)
 
     def _to_send_recv(self, net_io_before, net_io_after):
+        """
+        Calculates the amount of data sent and received during a network IO operation.
+
+        Args:
+            net_io_before (NetIOStats): The network IO statistics before the operation.
+            net_io_after (NetIOStats): The network IO statistics after the operation.
+
+        Returns:
+            Tuple[float, float]: A tuple containing the amount of data sent and received in megabytes.
+        """
         sleep_bytes_sent = net_io_after.bytes_sent - net_io_before.bytes_sent
         sleep_bytes_recv = net_io_after.bytes_recv - net_io_before.bytes_recv
         return self.to_mb(sleep_bytes_sent), self.to_mb(sleep_bytes_recv)
 
+    def validate_result(self, data: dict, result: typing.Union[dict, typing.Any]):
+        """
+        Validate the result of a function execution.
+
+        Args:
+            data (dict): The original data dictionary.
+            result (Union[dict, Any]): The result of the function execution.
+
+        Returns:
+            dict: The updated data dictionary.
+        """
+        if isinstance(result, dict):
+            if 'time' in result:  # we don't want to override the time
+                if self.verbose:
+                    self.logger.warning(f"Overriding time={result['time']}. function_time={data['time']}")
+                data['function_time'] = data['time']
+            data.update(result)
+        else:
+            if not self._is_primitive(result):
+                result = str(result)
+            data['function_result'] = result
+        return data
+
     def _run_func(self, func: callable, *args, **kwargs):
-        name, error, exception, result = func.__name__, '', None, None
+        """
+        Runs a given function with the provided arguments and keyword arguments.
+
+        Args:
+            func (callable): The function to be executed.
+            *args: Variable length argument list to be passed to the function.
+            **kwargs: Arbitrary keyword arguments to be passed to the function.
+
+        Returns:
+            tuple: A tuple containing the following elements:
+                - data (dict): A dictionary containing information about the function execution, including:
+                    - function_name (str): The name of the function.
+                    - args (str): A string representation of the arguments passed to the function.
+                    - kwargs (str): A string representation of the keyword arguments passed to the function.
+                    - error (str): The error message, if any, raised during the execution of the function.
+                    - time (float): The time taken to execute the function.
+                - result: The result of the function execution.
+                - exception: The exception, if any, raised during the execution of the function.
+        """
+        func_name, error, exception, result = func.__name__, '', None, None
         if self.verbose:
-            self.logger.info(f"Running {name} with {args} and {kwargs}")
+            self.logger.debug(f"Running {func_name} with {args} and {kwargs}")
         start_func_time = time.time()
         try:
             result = func(*args, **kwargs)
@@ -139,20 +221,25 @@ class Tracker(DuckDBConnection):
             exception = e
             error = str(e)
         func_time = time.time() - start_func_time
-        data = {}
-        if isinstance(result, dict):
-            data.update(result)
-        elif result is None:
-            data['function_result'] = None
-        else:
-            if not self._is_primitive(result):
-                result = str(result)
-            data['function_result'] = result
-        data.update({'name': name, 'time': func_time, 'error': error, 'args': str(list(args)), 'kwargs': str(kwargs)})
+        data = {'function_name': func_name,
+                'args': str(list(args)),
+                'kwargs': str(kwargs),
+                'error': error,
+                'time': func_time}
+        data = self.validate_result(data, result)
         return data, result, exception
 
     def wrap(self, name: str = None, params: dict = {}):
-        """wraps a function to track it's execution time and parameters"""
+        """
+        Generates a decorator that tracks the execution of a function.
+
+        Args:
+            name (str, optional): The name of the function being tracked. Defaults to None.
+            params (dict, optional): Additional parameters to pass to the tracker. Defaults to {}.
+
+        Returns:
+            TrackDecorator: A decorator object that tracks the execution of a function.
+        """
         parent_tracker = self
 
         class TrackDecorator:
@@ -167,8 +254,20 @@ class Tracker(DuckDBConnection):
 
         return TrackDecorator
 
-    def track(self, func: callable, params: dict = None, name: str = None, args: list = None, kwargs: dict = None):
-        """tracking a function which returns a dictionary or parameters to track"""
+    def track(self, func: callable, params: dict = None, args: list = None, kwargs: dict = None):
+        """
+        Executes a function and logs the execution data.
+
+        Args:
+            func (callable): The function to be executed.
+            params (dict, optional): Additional parameters to log along with the execution data. Defaults to None.
+            args (list, optional): Positional arguments to pass to the function. Defaults to None.
+            kwargs (dict, optional): Keyword arguments to pass to the function. Defaults to None.
+
+        Returns:
+            Any: The return value of the executed function.
+
+        """
         if params is None:
             params = {}
         if args is None:
@@ -185,8 +284,6 @@ class Tracker(DuckDBConnection):
             stats_process = multiprocessing.Process(target=stats.collect_stats, args=(stop_event,))
             stats_process.start()
         data, result, exception = self._run_func(func, *args, **kwargs)
-        if name is not None:
-            params['name'] = name
         data.update(params)
         if self.log_system_params:
             stop_event.set()
@@ -195,8 +292,6 @@ class Tracker(DuckDBConnection):
             bytes_sent, bytes_recv = self._to_send_recv(net_io_before, psutil.net_io_counters())
             data.update({'bytes_sent': bytes_sent, 'bytes_recv': bytes_recv})
         self.log(**data)
-        if self.verbose:
-            self.logger.info(f"Tracked {data}")
         if exception is not None and self.raise_on_error:
             raise exception
         return result
@@ -261,7 +356,8 @@ class Tracker(DuckDBConnection):
             f"INSERT INTO {TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
             list(values))
         if self.verbose:
-            self.logger.info(f"Tracked {data}")
+            message = '\t'.join([f'{key}={value}' for key, value in data.items()])
+            self.logger.info(f"{message}")
         self.latest = data
         return data
 

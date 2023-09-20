@@ -50,7 +50,7 @@ tracker.set_value('test_accuracy', 0.9)
 
 ## Track functions
 You can track any function.
-* The function must return a dictionary or None
+* The return value is logged before returned
 
 ```python
 tracker = Tracker('database.db', log_system_params=True, log_network_params=True, measurement_interval=0.1)
