@@ -10,13 +10,12 @@ def test_track_function():
     def foo(a: int, b: str):
         return a + len(b)
 
-    assert tracker.track(foo, kwargs={'a': 1, 'b': 'hello'})['function_result'] == 6
-    assert tracker.track(foo, args=[1, 'hello'])['function_result'] == 6
-    assert tracker.track(foo, args=[1, 'hello'])['name'] == 'foo'
-    assert tracker.track(foo, name='bar', args=[1, 'hello'])['name'] == 'bar'
-    data = tracker.track(foo, name='bar', params={'a': 2}, args=[1, 'hello'])
-    assert data['function_result'] == 6
-    assert data['a'] == 2
+    assert tracker.track(foo, kwargs={'a': 1, 'b': 'hello'}) == 6
+    assert tracker.track(foo, args=[1, 'hello']) == 6
+    assert tracker.latest['function_name'] == 'foo'
+    tracker.track(foo, params={'name': 'bar'}, args=[1, 'hello'])
+    assert tracker.latest['function_result'] == 6
+    assert tracker.latest['name'] == 'bar'
 
 
 def test_wrapper():
