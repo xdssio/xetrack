@@ -12,17 +12,12 @@ import re
 
 from xetrack.stats import Stats
 from xetrack.connection import DuckDBConnection
-from xetrack.constants import TRACK_ID, TABLE, TIMESTAMP
+from xetrack.constants import TABLE, TRACK_ID
 
 with contextlib.suppress(RuntimeError):
     multiprocessing.set_start_method('fork')
 
 default_logger = logging.getLogger(__name__)
-with contextlib.suppress(ImportError):
-    import loguru
-
-    default_logger = loguru.logger
-
 ALPHANUMERIC = re.compile(r'[^a-zA-Z0-9_]')
 
 
@@ -31,11 +26,17 @@ class Tracker(DuckDBConnection):
     Tracker class for tracking experiments, benchmarks, and other events.
     You can set params which are always attached to every event, and then track any parameters you want.
     """
+    FUNCTION_NAME = 'function_name'
+    FUNCTION_TIME = 'function_time'
+    FUNCTION_RESULT = 'function_result'
+    ARGS = 'args'
+    KWARGS = 'kwargs'
+    ERROR = 'error'    
+    TIMESTAMP = 'timestamp'
 
     def __init__(self, db: str = 'track.db',
                  params=None,
                  reset: bool = False,
-                 verbose: bool = True,
                  log_system_params: bool = True,
                  log_network_params: bool = True,
                  raise_on_error: bool = True,
@@ -49,18 +50,16 @@ class Tracker(DuckDBConnection):
                    Default is "track.db".
         :param params: A dictionary of default parameters to attach to every event. This can be changed later.
         :param reset: If True, the events table will be dropped and recreated. Default is False.
-        :param verbose: If True, log messages will be printed. Default is True.
         :param log_system_params: If True, system parameters will be logged. Default is True.
         :param log_network_params: If True, network parameters will be logged. Default is True.
         :param raise_on_error: If True, an error will be raised on failure. Default is True.
         :param measurement_interval: The interval in seconds at which to measure events. Default is 1.
-        :param logger: The logger to use for logging. If None, the default logger will be used.
+        :param logger: The logger to use for logging. If not provided, no logging are printed.
         """
         super().__init__(db=db)
         if params is None:
             params = {}
         self.params = params
-        self.verbose = verbose
         self.track_id = self.generate_uuid4()
         self._columns = set()
         self._create_events_table(reset=reset)
@@ -68,7 +67,7 @@ class Tracker(DuckDBConnection):
         self.log_network_params = log_network_params
         self.raise_on_error = raise_on_error
         self.measurement_interval = measurement_interval
-        self.logger = logger or default_logger
+        self.logger = logger
         self.latest = None
 
     @staticmethod
@@ -85,10 +84,19 @@ class Tracker(DuckDBConnection):
         return type(value) in (int, float, bool, str, bytes, bytearray)
 
     def _create_events_table(self, reset: bool = False):
+        """
+        Creates the events table in the database.
+
+        Parameters:
+            reset (bool): If True, drops the table if it already exists and recreates it. Defaults to False.
+
+        Returns:
+            None
+        """
         if reset:
             self.conn.execute(f"DROP TABLE IF EXISTS {TABLE}")
         self.conn.execute(
-            f"CREATE TABLE IF NOT EXISTS {TABLE} ({TIMESTAMP} VARCHAR PRIMARY KEY, {TRACK_ID} VARCHAR)")
+            f"CREATE TABLE IF NOT EXISTS {TABLE} ({Tracker.TIMESTAMP} VARCHAR PRIMARY KEY, {TRACK_ID} VARCHAR)")
         self.conn.execute("SHOW TABLES").fetchall()
         self._columns = set(self.dtypes.keys())
         for key, value in self.params.items():
@@ -134,7 +142,7 @@ class Tracker(DuckDBConnection):
     # TODO make more efficient
     def track_batch(self, data=List[dict]):
         if len(data) == 0:
-            if self.verbose:
+            if self.logger:
                 self.logger.warning('No values to track')
             return data
         for values in data:
@@ -180,15 +188,14 @@ class Tracker(DuckDBConnection):
             dict: The updated data dictionary.
         """
         if isinstance(result, dict):
-            if 'time' in result:  # we don't want to override the time
-                if self.verbose:
-                    self.logger.warning(f"Overriding time={result['time']}. function_time={data['time']}")
-                data['function_time'] = data['time']
+            for value in (Tracker.FUNCTION_TIME, Tracker.FUNCTION_RESULT, Tracker.FUNCTION_NAME):
+                if value in result and self.logger:  # we don't want to override the time
+                    self.logger.warning(f"Overriding {value}={result[value]}-> {data[value]}")
             data.update(result)
         else:
             if not self._is_primitive(result):
                 result = str(result)
-            data['function_result'] = result
+            data[Tracker.FUNCTION_RESULT] = result
         return data
 
     def _run_func(self, func: callable, *args, **kwargs):
@@ -212,7 +219,7 @@ class Tracker(DuckDBConnection):
                 - exception: The exception, if any, raised during the execution of the function.
         """
         func_name, error, exception, result = func.__name__, '', None, None
-        if self.verbose:
+        if self.logger:
             self.logger.debug(f"Running {func_name} with {args} and {kwargs}")
         start_func_time = time.time()
         try:
@@ -225,16 +232,15 @@ class Tracker(DuckDBConnection):
                 'args': str(list(args)),
                 'kwargs': str(kwargs),
                 'error': error,
-                'time': func_time}
+                'function_time': func_time}
         data = self.validate_result(data, result)
         return data, result, exception
 
-    def wrap(self, name: str = None, params: dict = {}):
+    def wrap(self, params: dict = {}):
         """
         Generates a decorator that tracks the execution of a function.
 
         Args:
-            name (str, optional): The name of the function being tracked. Defaults to None.
             params (dict, optional): Additional parameters to pass to the tracker. Defaults to {}.
 
         Returns:
@@ -245,12 +251,11 @@ class Tracker(DuckDBConnection):
         class TrackDecorator:
             def __init__(self, func):
                 self.func = func
-                self.name = name
                 self.params = params
                 self.tracker = parent_tracker
 
             def __call__(self, *args, **kwargs):
-                return self.tracker.track(self.func, params=self.params, name=self.name, args=args, kwargs=kwargs)
+                return self.tracker.track(self.func, params=self.params, args=args, kwargs=kwargs)
 
         return TrackDecorator
 
@@ -300,7 +305,7 @@ class Tracker(DuckDBConnection):
         if key not in self._columns:
             self.conn.execute(f"ALTER TABLE {TABLE} ADD COLUMN {key} {dtype}")
             self._columns.add(key)
-        elif self.verbose:
+        elif self.logger:
             self.logger.warning(f'Column {key} already exists')
         return value
 
@@ -317,9 +322,9 @@ class Tracker(DuckDBConnection):
         return key
 
     def _validate_data(self, data: dict):
-        if TIMESTAMP in data and self.verbose:
-            self.logger.warning(f"Overriding {TIMESTAMP} - please use another key")
-        if TRACK_ID in data and self.verbose:
+        if Tracker.TIMESTAMP in data and self.logger:
+            self.logger.warning(f"Overriding {Tracker.TIMESTAMP} - please use another key")
+        if TRACK_ID in data and self.logger:
             self.logger.warning(f"Overriding {TRACK_ID} - please use another key")
         data = {self._to_valid_key(key): value for key, value in data.items()}
         new_columns = set(data.keys()) - self._columns
@@ -331,9 +336,9 @@ class Tracker(DuckDBConnection):
         for key, value in self.params.items():
             if key not in data:
                 data[key] = value
-            elif self.verbose:
+            elif self.logger:
                 self.logger.warning(f'Overriding the {key} parameter')
-        data[TIMESTAMP] = self.get_timestamp()
+        data[Tracker.TIMESTAMP] = self.get_timestamp()
         data[TRACK_ID] = self.track_id
         return data
 
@@ -347,7 +352,7 @@ class Tracker(DuckDBConnection):
     def log(self, **data: dict) -> int:
         data_size = len(data)
         if data_size == 0:
-            if self.verbose:
+            if self.logger:
                 self.logger.warning('No values to track')
             return data_size
         data = self._validate_data(data)
@@ -355,7 +360,7 @@ class Tracker(DuckDBConnection):
         self.conn.execute(
             f"INSERT INTO {TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
             list(values))
-        if self.verbose:
+        if self.logger:
             message = '\t'.join([f'{key}={value}' for key, value in data.items()])
             self.logger.info(f"{message}")
         self.latest = data
@@ -403,7 +408,7 @@ class Tracker(DuckDBConnection):
 
     def tail(self, n: int = 5):
         return self.conn.execute(
-            f"SELECT * FROM {TABLE} WHERE {TRACK_ID} = '{self.track_id}' ORDER BY {TIMESTAMP} DESC LIMIT {n}").df()
+            f"SELECT * FROM {TABLE} WHERE {TRACK_ID} = '{self.track_id}' ORDER BY {Tracker.TIMESTAMP} DESC LIMIT {n}").df()
 
     def count_all(self):
         return self.conn.execute(

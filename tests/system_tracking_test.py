@@ -7,6 +7,7 @@ import os
 import sys
 import requests
 import pytest
+import logging
 
 pd.set_option('display.max_rows', 500)
 pd.set_option('display.max_columns', 500)

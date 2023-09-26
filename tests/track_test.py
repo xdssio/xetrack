@@ -1,3 +1,5 @@
+import logging
+
 from xetrack import Tracker
 import pytest
 from tempfile import NamedTemporaryFile
@@ -8,6 +10,16 @@ def database():
     temp = NamedTemporaryFile()
     database = temp.name
     return database
+
+
+def test_track_wrapper():
+    tracker = Tracker(db=database, params={"model": 'lightgbm'}, reset=True, logger=logging.getLogger())
+
+    @tracker.wrap(params={'name': 'foo', 'function_time':2})
+    def foo(a: int, b: int):
+        return a + b
+
+    foo(1,2)
 
 
 def test_track(database):

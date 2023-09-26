@@ -1,9 +1,5 @@
+TABLE = f"db.events"
 TRACK_ID = 'track_id'
-ID = '_id'
-EVENTS = 'events'
-DB = 'db'
-TABLE = f"{DB}.{EVENTS}"
-TIMESTAMP = 'timestamp'
 _DTYPES_TO_PYTHON = {
     'BOOLEAN': bool,
     'TINYINT': int,

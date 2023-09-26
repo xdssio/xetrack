@@ -23,29 +23,43 @@ pip install xetrack
 from xetrack import Tracker
 
 tracker = Tracker('database.db',
-                  params={'model': 'resnet18'},
-                  verbose=False)
+                  params={'model': 'resnet18'}
+                  )
 tracker.log(accuracy=0.9, loss=0.1, epoch=1)
+{'accuracy': 0.9, 'loss': 0.1, 'epoch': 1, 'model': 'resnet18', 'timestamp': '18-08-2023 11:02:35.162360',
+ 'track_id': 'cd8afc54-5992-4828-893d-a4cada28dba5'}
+
 tracker.latest
 {'accuracy': 0.9, 'loss': 0.1, 'epoch': 1, 'model': 'resnet18', 'timestamp': '18-08-2023 11:02:35.162360',
  'track_id': 'cd8afc54-5992-4828-893d-a4cada28dba5'}
 
-tracker.to_df(all=True)  # all runs as dataframe
-                    timestamp                              track_id     model  accuracy  loss  epoch
-0  21-08-2023 11:32:55.433332  9066505b-4a09-4946-ae4a-c3c957720bba  resnet18       0.9   0.1      1
-1  21-08-2023 11:33:01.302282  d4f5c4b7-e372-4d54-9a30-2d8a774fe9cc  resnet18       0.9   0.1      1
+
+tracker.to_df(all=True)  # as dataframe
+                    timestamp                              track_id     model  loss  epoch  accuracy
+0  26-09-2023 12:17:00.342814  398c985a-dc15-42da-88aa-6ac6cbf55794  resnet18   0.1      1       0.9
+1  26-09-2023 12:17:29.771021  398c985a-dc15-42da-88aa-6ac6cbf55794  resnet18   0.1      2       0.9
 
 ```
 Params are values which are added to every future row:
 
 ```python
 tracker.set_params({'model': 'resnet18', 'dataset': 'cifar10'})
+tracker.log(accuracy=0.9, loss=0.1, epoch=2)
+{'accuracy': 0.9, 'loss': 0.1, 'epoch': 2, 'model': 'resnet18', 'dataset': 'cifar10', 
+ 'timestamp': '26-09-2023 12:18:40.151756', 'track_id': '398c985a-dc15-42da-88aa-6ac6cbf55794'}
+
 ```
 
 You can also set a value to an entire run with *set_value* ("back in time"):
 
 ```python
 tracker.set_value('test_accuracy', 0.9)
+tracker.to_df()
+
+                    timestamp                              track_id     model  loss  epoch  accuracy  dataset  test_accuracy
+0  26-09-2023 12:17:00.342814  398c985a-dc15-42da-88aa-6ac6cbf55794  resnet18   0.1      1       0.9      NaN            0.9
+2  26-09-2023 12:18:40.151756  398c985a-dc15-42da-88aa-6ac6cbf55794  resnet18   0.1      2       0.9  cifar10            0.9
+
 ```
 
 ## Track functions
@@ -63,12 +77,28 @@ tracker.latest
 Or with a wrapper:
 ```python
 
-@tracker.wrap(name='foofoo')
+@tracker.wrap(params={'name':'foofoo'})
 def foo(a: int, b: str):
     return a + len(b)
-{'function_result': 6, 'name': 'foofoo', 'time': 7.867813110351562e-06, 'error': '', 'args': "[1, 'hello']", 'kwargs': '{}', 'disk_percent': 0, 'p_memory_percent': 0, 'cpu': 0, 'memory_percent': 0, 'bytes_sent': 0.0, 'bytes_recv': 0.0, 'model': 'lightgbm', 'timestamp': '18-08-2023 10:59:26.011938', 'track_id': 'a6f99e21-dfd8-4056-98e5-46b2a76fab41'}
+result = foo(1, 'hello')
+tracker.latest
+{'function_name': 'foo', 'args': "[1, 'hello']", 'kwargs': '{}', 'error': '', 'function_time': 4.0531158447265625e-06, 
+ 'function_result': 6, 'name': 'foofoo', 'disk_percent': 0, 'p_memory_percent': 0, 'cpu': 0, 'memory_percent': 0, 
+ 'bytes_sent': 0.0, 'bytes_recv': 0.0, 'model': 'resnet18', 'dataset': 'cifar10', 'timestamp': '26-09-2023 12:21:02.200245', 
+ 'track_id': '398c985a-dc15-42da-88aa-6ac6cbf55794'}
 ```
 
+### Logger integration
+```python
+import logging
+logging.basicConfig(level=logging.INFO)
+
+logger = logging.getLogger() # or loguru.logger
+tracker = Tracker(db=database.db, logger=logger)
+info = tracker.log(x='x')
+
+INFO:root:x=x	timestamp=26-09-2023 12:26:36.564740	track_id=beb17e36-b646-4049-aff1-fd0e1574eb9e
+```
 
 ### Pandas-like
 ```python

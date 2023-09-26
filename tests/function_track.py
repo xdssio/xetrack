@@ -23,11 +23,11 @@ def test_wrapper():
     tmp = NamedTemporaryFile()
     tracker = Tracker(db=tmp.name, params={"model": 'lightgbm'}, reset=True)
 
-    @tracker.wrap(name='foofoo')
+    @tracker.wrap(params={'name': 'foofoo'})
     def foo(a: int, b: str):
         return a + len(b)
 
     result = foo(1, 'hello')
 
-    assert tracker.latest['function_result'] == result
+    assert tracker.latest[tracker.FUNCTION_RESULT] == result
     assert tracker.latest['name'] == 'foofoo'
