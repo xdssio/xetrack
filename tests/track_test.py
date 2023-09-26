@@ -1,6 +1,6 @@
 import logging
 
-from xetrack import Tracker
+from xetrack import Tracker, Reader
 from tempfile import NamedTemporaryFile
 
 
@@ -48,3 +48,15 @@ def test_track():
     assert len(new_tracker) == 10
 
     assert len(new_tracker.to_df(all=True)) == 22
+
+
+def test_track_batch():
+    database = NamedTemporaryFile().name
+    tracker = Tracker(db=database, params={"model": 'lightgbm'})
+    n = 10
+    tracker.track_batch([{'a': i} for i in range(n)])
+    assert tracker.latest['a'] == 9
+    assert len(tracker) == n
+    assert len(Reader(database).to_df()) == n
+
+

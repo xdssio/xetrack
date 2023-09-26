@@ -9,7 +9,7 @@ import multiprocessing
 import time
 import psutil
 import re
-
+from duckdb import ConstraintException
 from xetrack.stats import Stats
 from xetrack.connection import DuckDBConnection
 from xetrack.constants import TABLE, TRACK_ID
@@ -139,14 +139,42 @@ class Tracker(DuckDBConnection):
     def get_timestamp():
         return dt.now().strftime('%d-%m-%Y %H:%M:%S.%f')
 
-    # TODO make more efficient
     def track_batch(self, data=List[dict]):
+        """
+        Track a batch of data.
+
+        Parameters:
+            data (List[dict]): The list of dictionaries containing the data to be tracked.
+
+        Returns:
+            List[dict]: The updated list of dictionaries after tracking the data.
+
+        This function takes a batch of data in the form of a list of dictionaries and tracks it. If the data is empty, a warning message is logged. The function then iterates over each event in the data and performs the following steps:
+        1. Validates the event data.
+        2. Converts the event data into keys, values, and size.
+        3. Attempts to insert the event data into the database table.
+        4. Logs the event data.
+        Finally, the function commits the transaction and updates the latest event data.
+
+        """
         if len(data) == 0:
             if self.logger:
                 self.logger.warning('No values to track')
             return data
-        for values in data:
-            self.log(**values)
+        self.conn.execute("BEGIN TRANSACTION")
+        for event in data:
+            event_data = self._validate_data(event)
+            keys, values, size = self._to_key_values(event_data)
+            with contextlib.suppress(ConstraintException):
+                self.conn.execute(
+                    f"INSERT INTO {TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
+                    values)
+            if self.logger:
+                message = '\t'.join([f'{key}={value}' for key, value in event_data.items()])
+                self.logger.info(f"{message}")
+
+        self.conn.execute("COMMIT TRANSACTION")
+        self.latest = event_data
 
     @staticmethod
     def to_mb(bytes: int):
