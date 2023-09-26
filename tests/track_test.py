@@ -1,28 +1,23 @@
 import logging
 
 from xetrack import Tracker
-import pytest
 from tempfile import NamedTemporaryFile
 
 
-@pytest.fixture
-def database():
-    temp = NamedTemporaryFile()
-    database = temp.name
-    return database
-
-
 def test_track_wrapper():
-    tracker = Tracker(db=database, params={"model": 'lightgbm'}, reset=True, logger=logging.getLogger())
+    tracker = Tracker(db=NamedTemporaryFile().name, params={"model": 'lightgbm'}, reset=True,
+                      logger=logging.getLogger())
 
-    @tracker.wrap(params={'name': 'foo', 'function_time':2})
+    @tracker.wrap(params={'name': 'foo', 'function_time': 2})
     def foo(a: int, b: int):
         return a + b
 
-    foo(1,2)
+    foo(1, 2)
+    assert tracker.latest['name'] == 'foo'
 
 
-def test_track(database):
+def test_track():
+    database = NamedTemporaryFile().name
     tracker = Tracker(db=database, params={"model": 'lightgbm'}, reset=True)
     assert len(tracker) == 0
 
@@ -53,4 +48,3 @@ def test_track(database):
     assert len(new_tracker) == 10
 
     assert len(new_tracker.to_df(all=True)) == 22
-    tracker._drop_table()
