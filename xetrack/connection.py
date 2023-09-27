@@ -34,3 +34,28 @@ class DuckDBConnection:
     def dtypes(self):
         return {column[0]: _DTYPES_TO_PYTHON.get(column[1]) for column in
                 self.conn.execute(f"DESCRIBE {TABLE}").fetchall()}
+
+    @staticmethod
+    def to_sql_type(value):
+        """
+        Convert a primitive Python value to its corresponding SQL type.
+
+        Parameters:
+            value (Any): The value to be converted.
+
+        Returns:
+            str: The SQL type corresponding to the given value.
+        """
+        value_type = type(value)
+        if value_type == bytearray:
+            return 'BLOB'
+        if value_type == int:
+            if value.bit_length() > 64:
+                return 'BIGINT'
+            else:
+                return 'INTEGER'
+        if value_type == float:
+            return 'FLOAT'
+        if value_type == bool:
+            return 'BOOLEAN'
+        return 'VARCHAR'

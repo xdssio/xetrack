@@ -28,7 +28,7 @@ def copy(source: str,
     for column, value in source.dtypes.items():
         if column not in target._columns:
             new_column_count += 1
-            target.add_column(column, value, source.to_py_type(value))
+            target.add_column(column, value, source.to_sql_type(value))
     keys = [column[1] for column in source.conn.execute(f"PRAGMA table_info({TABLE})").fetchall()]
     size = len(keys)
     target.conn.execute("BEGIN TRANSACTION")

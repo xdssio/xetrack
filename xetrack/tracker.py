@@ -31,7 +31,7 @@ class Tracker(DuckDBConnection):
     FUNCTION_RESULT = 'function_result'
     ARGS = 'args'
     KWARGS = 'kwargs'
-    ERROR = 'error'    
+    ERROR = 'error'
     TIMESTAMP = 'timestamp'
 
     def __init__(self, db: str = 'track.db',
@@ -60,6 +60,7 @@ class Tracker(DuckDBConnection):
         if params is None:
             params = {}
         self.params = params
+        self.logger = logger
         self.track_id = self.generate_uuid4()
         self._columns = set()
         self._create_events_table(reset=reset)
@@ -67,7 +68,6 @@ class Tracker(DuckDBConnection):
         self.log_network_params = log_network_params
         self.raise_on_error = raise_on_error
         self.measurement_interval = measurement_interval
-        self.logger = logger
         self.latest = None
 
     @staticmethod
@@ -100,28 +100,12 @@ class Tracker(DuckDBConnection):
         self.conn.execute("SHOW TABLES").fetchall()
         self._columns = set(self.dtypes.keys())
         for key, value in self.params.items():
-            self.add_column(key, value, self.to_py_type(value))
+            self.add_column(key, value, self.to_sql_type(value))
         self._columns = set(self.dtypes.keys())
 
     @staticmethod
     def generate_uuid4():
         return str(uuid4())
-
-    @staticmethod
-    def to_py_type(value):
-        value_type = type(value)
-        if value_type == bytearray:
-            return 'BLOB'
-        if value_type == int:
-            if value.bit_length() > 64:
-                return 'BIGINT'
-            else:
-                return 'INTEGER'
-        if value_type == float:
-            return 'FLOAT'
-        if value_type == bool:
-            return 'BOOLEAN'
-        return 'VARCHAR'
 
     def _drop_table(self):
         return self.conn.execute(f"DROP TABLE {TABLE}")
@@ -358,7 +342,7 @@ class Tracker(DuckDBConnection):
         new_columns = set(data.keys()) - self._columns
         for key in new_columns:
             self.conn.execute(
-                f"ALTER TABLE {TABLE} ADD COLUMN {key} {self.to_py_type(data[key])}")
+                f"ALTER TABLE {TABLE} ADD COLUMN {key} {self.to_sql_type(data[key])}")
             self._columns.add(key)
 
         for key, value in self.params.items():
@@ -421,13 +405,13 @@ class Tracker(DuckDBConnection):
 
     def set_value(self, key, value):
         if key not in self._columns:
-            self.add_column(key, value, self.to_py_type(value))
+            self.add_column(key, value, self.to_sql_type(value))
         self.conn.execute(
             f"UPDATE {TABLE} SET {key} = '{value}' WHERE {TRACK_ID} = '{self.track_id}'")
 
     def set_param(self, key, value):
         self.params[key] = value
-        self.add_column(key, value, self.to_py_type(value))
+        self.add_column(key, value, self.to_sql_type(value))
         return key
 
     def head(self, n: int = 5):
