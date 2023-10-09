@@ -34,10 +34,14 @@ def test_reader_set_value():
     editor = Reader(database)
     latest = editor.latest().to_dict('records')[0]
     assert latest['accuracy'] == 0.9
+
     editor.set_value('accuracy', 0.8, latest['track_id'])
-    df = editor.to_df()
-    assert df['track_id'].tolist()[0] == latest['track_id']
-    assert df['accuracy'].tolist() == [0.8, 0.9]
+    records = editor.to_df().to_dict('records')
+    for record in records:
+        if record['track_id'] == latest['track_id']:
+            assert record['accuracy'] == 0.8
+        else:
+            assert record['accuracy'] == 0.9
 
 
 def test_reader_set_where():

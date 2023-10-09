@@ -33,6 +33,7 @@ class Tracker(DuckDBConnection):
     KWARGS = 'kwargs'
     ERROR = 'error'
     TIMESTAMP = 'timestamp'
+    TRACK_INDEX = 'idx_track'
 
     def __init__(self, db: str = 'track.db',
                  params=None,
@@ -96,12 +97,22 @@ class Tracker(DuckDBConnection):
         if reset:
             self.conn.execute(f"DROP TABLE IF EXISTS {TABLE}")
         self.conn.execute(
-            f"CREATE TABLE IF NOT EXISTS {TABLE} ({Tracker.TIMESTAMP} VARCHAR PRIMARY KEY, {TRACK_ID} VARCHAR)")
+            f"CREATE TABLE IF NOT EXISTS {TABLE} ("
+            f"{Tracker.TIMESTAMP} VARCHAR, "
+            f"{TRACK_ID} VARCHAR,  "
+            f"PRIMARY KEY ({Tracker.TIMESTAMP}, {TRACK_ID}))")
         self.conn.execute("SHOW TABLES").fetchall()
         self._columns = set(self.dtypes.keys())
         for key, value in self.params.items():
             self.add_column(key, value, self.to_sql_type(value))
         self._columns = set(self.dtypes.keys())
+
+    def _create_index(self):
+        """Currently not used"""
+        result = self.conn.execute(
+            f"SELECT name FROM sqlite_master WHERE type='index' AND name='{Tracker.TRACK_INDEX}'").fetchone()
+        if result is None:
+            self.conn.execute(f"CREATE INDEX IF NOT EXISTS {Tracker.TRACK_INDEX} ON {TABLE} (TRACK_ID)")
 
     @staticmethod
     def generate_uuid4():
