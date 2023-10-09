@@ -9,6 +9,8 @@ import multiprocessing
 import time
 import psutil
 import re
+from coolname import generate_slug
+import random
 from duckdb import ConstraintException
 from xetrack.stats import Stats
 from xetrack.connection import DuckDBConnection
@@ -33,8 +35,6 @@ class Tracker(DuckDBConnection):
     KWARGS = 'kwargs'
     ERROR = 'error'
     TIMESTAMP = 'timestamp'
-    TRACK_INDEX = 'idx_track'
-
     def __init__(self, db: str = 'track.db',
                  params=None,
                  reset: bool = False,
@@ -42,7 +42,8 @@ class Tracker(DuckDBConnection):
                  log_network_params: bool = True,
                  raise_on_error: bool = True,
                  measurement_interval: float = 1,
-                 logger=None
+                 logger=None,
+                 track_id: str = None
                  ):
         """
         Initializes the class instance.
@@ -62,7 +63,7 @@ class Tracker(DuckDBConnection):
             params = {}
         self.params = params
         self.logger = logger
-        self.track_id = self.generate_uuid4()
+        self.track_id = track_id or self.generate_track_id()
         self._columns = set()
         self._create_events_table(reset=reset)
         self.log_system_params = log_system_params
@@ -70,6 +71,8 @@ class Tracker(DuckDBConnection):
         self.raise_on_error = raise_on_error
         self.measurement_interval = measurement_interval
         self.latest = None
+
+    TRACK_INDEX = 'idx_track'
 
     @staticmethod
     def _is_primitive(value: object) -> bool:
@@ -115,8 +118,8 @@ class Tracker(DuckDBConnection):
             self.conn.execute(f"CREATE INDEX IF NOT EXISTS {Tracker.TRACK_INDEX} ON {TABLE} (TRACK_ID)")
 
     @staticmethod
-    def generate_uuid4():
-        return str(uuid4())
+    def generate_track_id():
+        return generate_slug(2) + '-' + str(random.randint(0, 9999)).zfill(4)
 
     def _drop_table(self):
         return self.conn.execute(f"DROP TABLE {TABLE}")

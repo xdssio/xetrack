@@ -21,6 +21,7 @@ python = "^3.9"
 duckdb = "^0.8.1"
 pandas = "^2.0.3"
 psutil = "^5.9.5"
+coolname = "^2.2.0"
 
 [tool.poetry.extras]
 dev = ["pytest", "pyxet" ,"loguru"]
