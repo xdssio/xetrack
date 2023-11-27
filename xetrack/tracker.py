@@ -1,7 +1,7 @@
 import contextlib
 import os
 import typing
-from typing import List
+from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 from datetime import datetime as dt
 import logging
@@ -35,6 +35,7 @@ class Tracker(DuckDBConnection):
     KWARGS = 'kwargs'
     ERROR = 'error'
     TIMESTAMP = 'timestamp'
+
     def __init__(self, db: str = 'track.db',
                  params=None,
                  reset: bool = False,
@@ -115,7 +116,8 @@ class Tracker(DuckDBConnection):
         result = self.conn.execute(
             f"SELECT name FROM sqlite_master WHERE type='index' AND name='{Tracker.TRACK_INDEX}'").fetchone()
         if result is None:
-            self.conn.execute(f"CREATE INDEX IF NOT EXISTS {Tracker.TRACK_INDEX} ON {TABLE} (TRACK_ID)")
+            self.conn.execute(
+                f"CREATE INDEX IF NOT EXISTS {Tracker.TRACK_INDEX} ON {TABLE} (TRACK_ID)")
 
     @staticmethod
     def generate_track_id():
@@ -168,7 +170,8 @@ class Tracker(DuckDBConnection):
                     f"INSERT INTO {TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
                     values)
             if self.logger:
-                message = '\t'.join([f'{key}={value}' for key, value in event_data.items()])
+                message = '\t'.join(
+                    [f'{key}={value}' for key, value in event_data.items()])
                 self.logger.info(f"{message}")
 
         self.conn.execute("COMMIT TRANSACTION")
@@ -216,7 +219,8 @@ class Tracker(DuckDBConnection):
         if isinstance(result, dict):
             for value in (Tracker.FUNCTION_TIME, Tracker.FUNCTION_RESULT, Tracker.FUNCTION_NAME):
                 if value in result and self.logger:  # we don't want to override the time
-                    self.logger.warning(f"Overriding {value}={result[value]}-> {data[value]}")
+                    self.logger.warning(
+                        f"Overriding {value}={result[value]}-> {data[value]}")
             data.update(result)
         else:
             if not self._is_primitive(result):
@@ -285,7 +289,7 @@ class Tracker(DuckDBConnection):
 
         return TrackDecorator
 
-    def track(self, func: callable, params: dict = None, args: list = None, kwargs: dict = None):
+    def track(self, func: callable, params: Optional[dict] = None, args: Optional[list] = None, kwargs: Optional[dict] = None):
         """
         Executes a function and logs the execution data.
 
@@ -311,8 +315,10 @@ class Tracker(DuckDBConnection):
             process = psutil.Process(os.getpid())
             manager = multiprocessing.Manager()
             stop_event = multiprocessing.Event()
-            stats = Stats(process, stats=manager.dict(), interval=self.measurement_interval)
-            stats_process = multiprocessing.Process(target=stats.collect_stats, args=(stop_event,))
+            stats = Stats(process, stats=manager.dict(),
+                          interval=self.measurement_interval)
+            stats_process = multiprocessing.Process(
+                target=stats.collect_stats, args=(stop_event,))
             stats_process.start()
         data, result, exception = self._run_func(func, *args, **kwargs)
         data.update(params)
@@ -320,7 +326,8 @@ class Tracker(DuckDBConnection):
             stop_event.set()
             data.update(stats.get_average_stats())
         if self.log_network_params:
-            bytes_sent, bytes_recv = self._to_send_recv(net_io_before, psutil.net_io_counters())
+            bytes_sent, bytes_recv = self._to_send_recv(
+                net_io_before, psutil.net_io_counters())
             data.update({'bytes_sent': bytes_sent, 'bytes_recv': bytes_recv})
         self.log(**data)
         if exception is not None and self.raise_on_error:
@@ -349,9 +356,11 @@ class Tracker(DuckDBConnection):
 
     def _validate_data(self, data: dict):
         if Tracker.TIMESTAMP in data and self.logger:
-            self.logger.warning(f"Overriding {Tracker.TIMESTAMP} - please use another key")
+            self.logger.warning(
+                f"Overriding {Tracker.TIMESTAMP} - please use another key")
         if TRACK_ID in data and self.logger:
-            self.logger.warning(f"Overriding {TRACK_ID} - please use another key")
+            self.logger.warning(
+                f"Overriding {TRACK_ID} - please use another key")
         data = {self._to_valid_key(key): value for key, value in data.items()}
         new_columns = set(data.keys()) - self._columns
         for key in new_columns:
@@ -369,25 +378,26 @@ class Tracker(DuckDBConnection):
         return data
 
     def _to_key_values(self, data: dict):
-        keys, values = [], []
+        keys, values, i = [], [], 0
         for i, (key, value) in enumerate(data.items()):
             keys.append(key)
             values.append(value)
         return keys, values, i + 1
 
-    def log(self, **data: dict) -> int:
+    def log(self, **data: Dict[Union[str, int, float, bool], Any]) -> Dict[str, Any]:
         data_size = len(data)
         if data_size == 0:
             if self.logger:
                 self.logger.warning('No values to track')
-            return data_size
+            return data
         data = self._validate_data(data)
         keys, values, size = self._to_key_values(data)
         self.conn.execute(
             f"INSERT INTO {TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
             list(values))
         if self.logger:
-            message = '\t'.join([f'{key}={value}' for key, value in data.items()])
+            message = '\t'.join(
+                [f'{key}={value}' for key, value in data.items()])
             self.logger.info(f"{message}")
         self.latest = data
         return data
@@ -407,7 +417,8 @@ class Tracker(DuckDBConnection):
                 item]
 
         elif isinstance(item, int):
-            results = self.conn.execute(f"SELECT * FROM {TABLE} WHERE {Tracker.ID} = {item}").df()
+            results = self.conn.execute(
+                f"SELECT * FROM {TABLE} WHERE {Tracker.ID} = {item}").df()
             if len(results) == 0:
                 return None
             return results.iloc[0].to_dict()
