@@ -20,6 +20,9 @@ def copy(source: str,
     #     raise ValueError(f"Invalid handle_duplicate: {handle_duplicate} - Must be either IGNORE or REPLACE")
     source = Tracker(db=source)
     target = Tracker(db=target)
+    ids = target.conn.execute(  # type: ignore
+        "SELECT timestamp, track_id track_id FROM db.events").fetchall()  # type: ignore
+    ids = set([f"{id[0]}-{id[1]}" for id in ids])  # type: ignore
     results = source.conn.execute(f"SELECT * FROM {TABLE}").fetchall()
     if len(results) == 0:
         print('No data to copy')
@@ -29,10 +32,16 @@ def copy(source: str,
         if column not in target._columns:
             new_column_count += 1
             target.add_column(column, value, source.to_sql_type(value))
-    keys = [column[1] for column in source.conn.execute(f"PRAGMA table_info({TABLE})").fetchall()]
+    keys = [column[1] for column in source.conn.execute(
+        f"PRAGMA table_info({TABLE})").fetchall()]
     size = len(keys)
+    timestamp_ix, track_ix = keys.index('timestamp'), keys.index(TRACK_ID)
+    count = 0
     target.conn.execute("BEGIN TRANSACTION")
     for event in results:
+        if f"{event[timestamp_ix]}-{event[track_ix]}" in ids:
+            continue
+        count += 1
         values = list(event)
         with contextlib.suppress(duckdb.ConstraintException):
             target.conn.execute(
@@ -40,4 +49,6 @@ def copy(source: str,
                 values)
     target.conn.execute("COMMIT TRANSACTION")
     total = target.count_all()
-    print(f"Copied {len(results)} events and {new_column_count} new columns. New total is {total} events")
+    print(
+        f"Copied {count} events and {new_column_count} new columns. New total is {total} events")
+    return count
