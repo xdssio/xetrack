@@ -1,12 +1,12 @@
 import logging
 
 from xetrack import Tracker, Reader
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 
 def test_track_wrapper():
-    tracker = Tracker(db=NamedTemporaryFile().name, params={"model": 'lightgbm'}, reset=True,
-                      logger=logging.getLogger())
+    tracker = Tracker(db=Tracker.IN_MEMROY, params={
+                      "model": 'lightgbm'}, reset=True)
 
     @tracker.wrap(params={'name': 'foo', 'function_time': 2})
     def foo(a: int, b: int):
@@ -21,11 +21,13 @@ def test_track():
     tracker = Tracker(db=database, params={"model": 'lightgbm'}, reset=True)
     assert len(tracker) == 0
 
-    data = {'accuracy': 0.9, 'data': "mnist", 'params': {'lr': 0.01, 'epochs': 10}}
+    data = {'accuracy': 0.9, 'data': "mnist",
+            'params': {'lr': 0.01, 'epochs': 10}}
     results = tracker.log(**data)
     assert len(results) == 6  # data size including the default params
     assert tracker.latest == results
-    assert len(tracker) == len(tracker.to_df()) == len(tracker.to_df(all=True)) == 1
+    assert len(tracker) == len(tracker.to_df()) == len(
+        tracker.to_df(all=True)) == 1
     tracker.set_params({"model": 'lightgbm', 'branch': 'main'})
     assert len(tracker.log(**data)) == 7  # we added another default param
 
@@ -36,11 +38,13 @@ def test_track():
     assert tracker['model'].iloc[0] == 'xgboost'
     assert len(tracker['model'].value_counts()) == 1
 
-    for i in range(10):
+    for _ in range(10):
         tracker.log(**data)
-    assert tracker['model'].value_counts().to_dict() == {'xgboost': 2, 'lightgbm': 10}
+    assert tracker['model'].value_counts().to_dict(
+    ) == {'xgboost': 2, 'lightgbm': 10}  # type: ignore
 
-    assert len(tracker.head()) == len(tracker.tail()) != len(tracker.to_df()) == len(tracker)
+    assert len(tracker.head()) == len(tracker.tail()) != len(
+        tracker.to_df()) == len(tracker)
 
     new_tracker = Tracker(db=database)
     new_tracker.track_batch([data] * 10)
@@ -60,3 +64,9 @@ def test_track_batch():
     assert len(Reader(database).to_df()) == n
 
 
+def test_skip_insert():
+    logs = TemporaryDirectory().name
+    tracker = Tracker(db=Tracker.SKIP_INSERT, logs_path=logs)
+    tracker.log(a=1, b=2)
+    assert len(tracker.to_df()) == 0
+    assert len(Reader.read_logs(logs)) == 1

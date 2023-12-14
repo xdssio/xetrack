@@ -2,7 +2,6 @@ import contextlib
 import os
 import typing
 from typing import Any, Dict, List, Optional, Union
-from uuid import uuid4
 from datetime import datetime as dt
 import logging
 import multiprocessing
@@ -14,7 +13,8 @@ import random
 from duckdb import ConstraintException
 from xetrack.stats import Stats
 from xetrack.connection import DuckDBConnection
-from xetrack.constants import TABLE, TRACK_ID
+from xetrack.config import CONSTANTS, LOGURU_PARAMS, SCHEMA_PARAMS, TRACKER_CONSTANTS
+from xetrack.logging import Logger
 
 with contextlib.suppress(RuntimeError):
     multiprocessing.set_start_method('fork')
@@ -28,13 +28,8 @@ class Tracker(DuckDBConnection):
     Tracker class for tracking experiments, benchmarks, and other events.
     You can set params which are always attached to every event, and then track any parameters you want.
     """
-    FUNCTION_NAME = 'function_name'
-    FUNCTION_TIME = 'function_time'
-    FUNCTION_RESULT = 'function_result'
-    ARGS = 'args'
-    KWARGS = 'kwargs'
-    ERROR = 'error'
-    TIMESTAMP = 'timestamp'
+    IN_MEMROY: str = ':memory:'
+    SKIP_INSERT: str = 'SKIP_INSERT'
 
     def __init__(self, db: str = 'track.db',
                  params=None,
@@ -43,8 +38,10 @@ class Tracker(DuckDBConnection):
                  log_network_params: bool = True,
                  raise_on_error: bool = True,
                  measurement_interval: float = 1,
-                 logger=None,
-                 track_id: str = None
+                 track_id: Optional[str] = None,
+                 logs_path: Optional[str] = None,
+                 logs_file_format: Optional[str] = None,
+                 logs_stdout: bool = False,
                  ):
         """
         Initializes the class instance.
@@ -57,14 +54,22 @@ class Tracker(DuckDBConnection):
         :param log_network_params: If True, network parameters will be logged. Default is True.
         :param raise_on_error: If True, an error will be raised on failure. Default is True.
         :param measurement_interval: The interval in seconds at which to measure events. Default is 1.
-        :param logger: The logger to use for logging. If not provided, no logging are printed.
+        :param track_id: The track id to use. If None, a random track id will be generated.
+        :param logs_path: The path to the logs directory. If given, logs will be printed to that file.
+        :param logs_file_format: The format of the logs file. Default is "{time:YYYY-MM-DD}.log" (daily). Only apply if logs_path is given.
+        :param logs_stdout: If True, logs will be printed to stdout. Default is False.
         """
+        self.skip_insert = False
+        if db == Tracker.SKIP_INSERT:
+            self.skip_insert = True
+            db = Tracker.IN_MEMROY
         super().__init__(db=db)
         if params is None:
             params = {}
         self.params = params
-        self.logger = logger
         self.track_id = track_id or self.generate_track_id()
+        self.logger = self._build_logger(
+            logs_stdout, logs_path, logs_file_format)
         self._columns = set()
         self._create_events_table(reset=reset)
         self.log_system_params = log_system_params
@@ -73,7 +78,14 @@ class Tracker(DuckDBConnection):
         self.measurement_interval = measurement_interval
         self.latest = None
 
-    TRACK_INDEX = 'idx_track'
+    def _build_logger(self, stdout: bool = False, logs_path: Optional[str] = None, logs_file_format: Optional[str] = None) -> Optional[Logger]:
+        """
+        Builds a logger object.
+        """
+        if stdout or logs_path:
+            return Logger(
+                stdout=stdout, logs_path=logs_path, file_format=logs_file_format)
+        return None
 
     @staticmethod
     def _is_primitive(value: object) -> bool:
@@ -99,37 +111,29 @@ class Tracker(DuckDBConnection):
             None
         """
         if reset:
-            self.conn.execute(f"DROP TABLE IF EXISTS {TABLE}")
+            self.conn.execute(f"DROP TABLE IF EXISTS {SCHEMA_PARAMS.TABLE}")
         self.conn.execute(
-            f"CREATE TABLE IF NOT EXISTS {TABLE} ("
-            f"{Tracker.TIMESTAMP} VARCHAR, "
-            f"{TRACK_ID} VARCHAR,  "
-            f"PRIMARY KEY ({Tracker.TIMESTAMP}, {TRACK_ID}))")
+            f"CREATE TABLE IF NOT EXISTS {SCHEMA_PARAMS.TABLE} ("
+            f"{TRACKER_CONSTANTS.TIMESTAMP} VARCHAR, "
+            f"{SCHEMA_PARAMS.TRACK_ID} VARCHAR,  "
+            f"PRIMARY KEY ({TRACKER_CONSTANTS.TIMESTAMP}, {SCHEMA_PARAMS.TRACK_ID}))")
         self.conn.execute("SHOW TABLES").fetchall()
         self._columns = set(self.dtypes.keys())
         for key, value in self.params.items():
-            self.add_column(key, value, self.to_sql_type(value))
+            self.add_column(key, value)
         self._columns = set(self.dtypes.keys())
-
-    def _create_index(self):
-        """Currently not used"""
-        result = self.conn.execute(
-            f"SELECT name FROM sqlite_master WHERE type='index' AND name='{Tracker.TRACK_INDEX}'").fetchone()
-        if result is None:
-            self.conn.execute(
-                f"CREATE INDEX IF NOT EXISTS {Tracker.TRACK_INDEX} ON {TABLE} (TRACK_ID)")
 
     @staticmethod
     def generate_track_id():
-        return generate_slug(2) + '-' + str(random.randint(0, 9999)).zfill(4)
+        return f'{generate_slug(2)}-{str(random.randint(0, 9999)).zfill(4)}'
 
     def _drop_table(self):
-        return self.conn.execute(f"DROP TABLE {TABLE}")
+        return self.conn.execute(f"DROP TABLE {SCHEMA_PARAMS.TABLE}")
 
     @property
     def _len(self) -> int:
         return self.conn.execute(
-            f"SELECT COUNT(*) FROM {TABLE} WHERE {TRACK_ID} = '{self.track_id}'").fetchall()[
+            f"SELECT COUNT(*) FROM {SCHEMA_PARAMS.TABLE} WHERE {SCHEMA_PARAMS.TRACK_ID} = '{self.track_id}'").fetchall()[
             0][0]
 
     def __len__(self):
@@ -137,7 +141,7 @@ class Tracker(DuckDBConnection):
 
     @staticmethod
     def get_timestamp():
-        return dt.now().strftime('%d-%m-%Y %H:%M:%S.%f')
+        return dt.now().strftime(CONSTANTS.TIMESTAMP_FORMAT)
 
     def track_batch(self, data=List[dict]):
         """
@@ -157,23 +161,21 @@ class Tracker(DuckDBConnection):
         Finally, the function commits the transaction and updates the latest event data.
 
         """
-        if len(data) == 0:
+        if not data:
             if self.logger:
                 self.logger.warning('No values to track')
             return data
+        event_data = {}
         self.conn.execute("BEGIN TRANSACTION")
-        for event in data:
+        for event in data:  # type: ignore
             event_data = self._validate_data(event)
             keys, values, size = self._to_key_values(event_data)
             with contextlib.suppress(ConstraintException):
                 self.conn.execute(
-                    f"INSERT INTO {TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
+                    f"INSERT INTO {SCHEMA_PARAMS.TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
                     values)
             if self.logger:
-                message = '\t'.join(
-                    [f'{key}={value}' for key, value in event_data.items()])
-                self.logger.info(f"{message}")
-
+                self.logger.track(event_data)
         self.conn.execute("COMMIT TRANSACTION")
         self.latest = event_data
 
@@ -217,18 +219,18 @@ class Tracker(DuckDBConnection):
             dict: The updated data dictionary.
         """
         if isinstance(result, dict):
-            for value in (Tracker.FUNCTION_TIME, Tracker.FUNCTION_RESULT, Tracker.FUNCTION_NAME):
+            for value in (TRACKER_CONSTANTS.FUNCTION_TIME, TRACKER_CONSTANTS.FUNCTION_RESULT, TRACKER_CONSTANTS.FUNCTION_NAME):
                 if value in result and self.logger:  # we don't want to override the time
                     self.logger.warning(
-                        f"Overriding {value}={result[value]}-> {data[value]}")
-            data.update(result)
+                        f"Overriding {value}={result[value]} -> {data[value]}")
+            data |= result
         else:
             if not self._is_primitive(result):
                 result = str(result)
-            data[Tracker.FUNCTION_RESULT] = result
+            data[TRACKER_CONSTANTS.FUNCTION_RESULT] = result
         return data
 
-    def _run_func(self, func: callable, *args, **kwargs):
+    def _run_func(self, func: callable, *args, **kwargs):  # type: ignore
         """
         Runs a given function with the provided arguments and keyword arguments.
 
@@ -266,7 +268,7 @@ class Tracker(DuckDBConnection):
         data = self.validate_result(data, result)
         return data, result, exception
 
-    def wrap(self, params: dict = {}):
+    def wrap(self, params: Optional[dict] = None):
         """
         Generates a decorator that tracks the execution of a function.
 
@@ -276,6 +278,8 @@ class Tracker(DuckDBConnection):
         Returns:
             TrackDecorator: A decorator object that tracks the execution of a function.
         """
+        if params is None:
+            params = {}
         parent_tracker = self
 
         class TrackDecorator:
@@ -289,7 +293,9 @@ class Tracker(DuckDBConnection):
 
         return TrackDecorator
 
-    def track(self, func: callable, params: Optional[dict] = None, args: Optional[list] = None, kwargs: Optional[dict] = None):
+    def track(self, func: callable, params: Optional[dict] = None,
+              args: Optional[list] = None,
+              kwargs: Optional[dict] = None):
         """
         Executes a function and logs the execution data.
 
@@ -323,20 +329,22 @@ class Tracker(DuckDBConnection):
         data, result, exception = self._run_func(func, *args, **kwargs)
         data.update(params)
         if self.log_system_params:
-            stop_event.set()
-            data.update(stats.get_average_stats())
+            stop_event.set()  # type: ignore
+            data.update(stats.get_average_stats())  # type: ignore
         if self.log_network_params:
             bytes_sent, bytes_recv = self._to_send_recv(
-                net_io_before, psutil.net_io_counters())
+                net_io_before, psutil.net_io_counters())  # type: ignore
             data.update({'bytes_sent': bytes_sent, 'bytes_recv': bytes_recv})
         self.log(**data)
         if exception is not None and self.raise_on_error:
             raise exception
         return result
 
-    def add_column(self, key, value, dtype: type):
+    def add_column(self, key, value):
+        dtype = self.to_sql_type(value)
         if key not in self._columns:
-            self.conn.execute(f"ALTER TABLE {TABLE} ADD COLUMN {key} {dtype}")
+            self.conn.execute(
+                f"ALTER TABLE {SCHEMA_PARAMS.TABLE} ADD COLUMN {key} {dtype}")
             self._columns.add(key)
         elif self.logger:
             self.logger.warning(f'Column {key} already exists')
@@ -347,7 +355,7 @@ class Tracker(DuckDBConnection):
         key = ALPHANUMERIC.sub('_', key)
 
         if ALPHANUMERIC.match(key[0]) is not None:
-            key = '_' + key
+            key = f'_{key}'
 
         # Truncate the name if needed
         max_length = 64
@@ -355,17 +363,17 @@ class Tracker(DuckDBConnection):
         return key
 
     def _validate_data(self, data: dict):
-        if Tracker.TIMESTAMP in data and self.logger:
+        if TRACKER_CONSTANTS.TIMESTAMP in data and self.logger:
             self.logger.warning(
-                f"Overriding {Tracker.TIMESTAMP} - please use another key")
-        if TRACK_ID in data and self.logger:
+                f"Overriding {TRACKER_CONSTANTS.TIMESTAMP} - please use another key")
+        if SCHEMA_PARAMS.TRACK_ID in data and self.logger:
             self.logger.warning(
-                f"Overriding {TRACK_ID} - please use another key")
+                f"Overriding {SCHEMA_PARAMS.TRACK_ID} - please use another key")
         data = {self._to_valid_key(key): value for key, value in data.items()}
         new_columns = set(data.keys()) - self._columns
         for key in new_columns:
             self.conn.execute(
-                f"ALTER TABLE {TABLE} ADD COLUMN {key} {self.to_sql_type(data[key])}")
+                f"ALTER TABLE {SCHEMA_PARAMS.TABLE} ADD COLUMN {key} {self.to_sql_type(data[key])}")
             self._columns.add(key)
 
         for key, value in self.params.items():
@@ -373,8 +381,8 @@ class Tracker(DuckDBConnection):
                 data[key] = value
             elif self.logger:
                 self.logger.warning(f'Overriding the {key} parameter')
-        data[Tracker.TIMESTAMP] = self.get_timestamp()
-        data[TRACK_ID] = self.track_id
+        data[TRACKER_CONSTANTS.TIMESTAMP] = self.get_timestamp()
+        data[SCHEMA_PARAMS.TRACK_ID] = self.track_id
         return data
 
     def _to_key_values(self, data: dict):
@@ -392,13 +400,12 @@ class Tracker(DuckDBConnection):
             return data
         data = self._validate_data(data)
         keys, values, size = self._to_key_values(data)
-        self.conn.execute(
-            f"INSERT INTO {TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
-            list(values))
+        if not self.skip_insert:
+            self.conn.execute(
+                f"INSERT INTO {SCHEMA_PARAMS.TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
+                list(values))
         if self.logger:
-            message = '\t'.join(
-                [f'{key}={value}' for key, value in data.items()])
-            self.logger.info(f"{message}")
+            self.logger.track(data)
         self.latest = data
         return data
 
@@ -406,22 +413,19 @@ class Tracker(DuckDBConnection):
         return self.head().__repr__()
 
     def to_df(self, all: bool = False):
-        query = f"SELECT * FROM {TABLE}"
+        query = f"SELECT * FROM {SCHEMA_PARAMS.TABLE}"
         if not all:
-            query += f" WHERE {TRACK_ID} = '{self.track_id}'"
+            query += f" WHERE {SCHEMA_PARAMS.TRACK_ID} = '{self.track_id}'"
         return self.conn.execute(query).df()
 
     def __getitem__(self, item):
         if isinstance(item, str):
-            return self.conn.execute(f"SELECT {item} FROM {TABLE} WHERE {TRACK_ID} = '{self.track_id}'").df()[
+            return self.conn.execute(f"SELECT {item} FROM {SCHEMA_PARAMS.TABLE} WHERE {SCHEMA_PARAMS.TRACK_ID} = '{self.track_id}'").df()[
                 item]
-
         elif isinstance(item, int):
             results = self.conn.execute(
-                f"SELECT * FROM {TABLE} WHERE {Tracker.ID} = {item}").df()
-            if len(results) == 0:
-                return None
-            return results.iloc[0].to_dict()
+                f"SELECT * FROM {SCHEMA_PARAMS.TABLE} LIMIT 1 OFFSET {item-1}").df()
+            return None if len(results) == 0 else results.iloc[0].to_dict()
         raise ValueError(f"Invalid type: {type(item)}")
 
     def set_params(self, params: dict):
@@ -430,26 +434,26 @@ class Tracker(DuckDBConnection):
 
     def set_value(self, key, value):
         if key not in self._columns:
-            self.add_column(key, value, self.to_sql_type(value))
+            self.add_column(key, value)
         self.conn.execute(
-            f"UPDATE {TABLE} SET {key} = '{value}' WHERE {TRACK_ID} = '{self.track_id}'")
+            f"UPDATE {SCHEMA_PARAMS.TABLE} SET {key} = '{value}' WHERE {SCHEMA_PARAMS.TRACK_ID} = '{self.track_id}'")
 
     def set_param(self, key, value):
         self.params[key] = value
-        self.add_column(key, value, self.to_sql_type(value))
+        self.add_column(key, value)
         return key
 
     def head(self, n: int = 5):
         return self.conn.execute(
-            f"SELECT * FROM {TABLE} WHERE {TRACK_ID} = '{self.track_id}' LIMIT {n}").df()
+            f"SELECT * FROM {SCHEMA_PARAMS.TABLE} WHERE {SCHEMA_PARAMS.TRACK_ID} = '{self.track_id}' LIMIT {n}").df()
 
     def tail(self, n: int = 5):
         return self.conn.execute(
-            f"SELECT * FROM {TABLE} WHERE {TRACK_ID} = '{self.track_id}' ORDER BY {Tracker.TIMESTAMP} DESC LIMIT {n}").df()
+            f"SELECT * FROM {SCHEMA_PARAMS.TABLE} WHERE {SCHEMA_PARAMS.TRACK_ID} = '{self.track_id}' ORDER BY {TRACKER_CONSTANTS.TIMESTAMP} DESC LIMIT {n}").df()
 
     def count_all(self):
         return self.conn.execute(
-            f"SELECT COUNT(*) FROM {TABLE}").fetchall()[
+            f"SELECT COUNT(*) FROM {SCHEMA_PARAMS.TABLE}").fetchall()[
             0][0]
 
     def count_run(self):

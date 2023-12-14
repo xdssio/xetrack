@@ -1,6 +1,6 @@
 from xetrack import Tracker, Reader
 import pandas as pd
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 import multiprocessing as mp
 from xetrack.cli import tail
 
@@ -107,3 +107,9 @@ def test_reader_delete_run():
     assert len(editor) == 1
     assert editor.latest().to_dict('records')[
         0]['track_id'] != latest['track_id']
+
+
+def test_reader_logs():
+    tempdir = TemporaryDirectory()
+    Tracker(db=Tracker.IN_MEMROY, logs_path=tempdir.name).log(accuracy=0.9)
+    assert len(Reader.read_logs(tempdir.name)) == 1

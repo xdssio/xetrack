@@ -1,10 +1,7 @@
 import logging
-from xetrack.constants import _DTYPES_TO_PYTHON, TABLE
+from xetrack.config import SCHEMA_PARAMS, CONSTANTS
 import duckdb
 
-EVENTS = 'events'
-DB = 'db'
-TRACK_ID = 'track_id'
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +10,7 @@ class DuckDBConnection:
     def __init__(self, db: str = 'track.db'):
         logger.debug(f"Connecting to {db}")
         self.db = db
-        self.table_name = f"{DB}.{EVENTS}"
+        self.table_name = SCHEMA_PARAMS.TABLE
         self.conn = self._init_connection()
 
     def _init_connection(self):
@@ -21,9 +18,11 @@ class DuckDBConnection:
         if 'sqlite_scanner' not in conn.execute("SELECT * FROM duckdb_extensions()").fetchall():
             conn.install_extension('sqlite')
         # conn.load_extension('sqlite')
-        is_attached = conn.execute(f"SELECT * FROM pragma_database_list WHERE name = '{DB}'").fetchall()
+        db = SCHEMA_PARAMS.TABLE.split('.')[0]
+        is_attached = conn.execute(
+            f"SELECT * FROM pragma_database_list WHERE name = '{db}'").fetchall()
         if not is_attached:
-            conn.execute(f"ATTACH '{self.db}' AS {DB} (TYPE SQLITE)")
+            conn.execute(f"ATTACH '{self.db}' AS {db} (TYPE SQLITE)")
         return conn
 
     @property
@@ -32,11 +31,11 @@ class DuckDBConnection:
 
     @property
     def dtypes(self):
-        return {column[0]: _DTYPES_TO_PYTHON.get(column[1]) for column in
-                self.conn.execute(f"DESCRIBE {TABLE}").fetchall()}
+        return {column[0]: CONSTANTS._DTYPES_TO_PYTHON.get(column[1]) for column in
+                self.conn.execute(f"DESCRIBE {SCHEMA_PARAMS.TABLE}").fetchall()}
 
     @staticmethod
-    def to_sql_type(value):
+    def to_sql_type(value) -> str:
         """
         Convert a primitive Python value to its corresponding SQL type.
 
@@ -50,12 +49,7 @@ class DuckDBConnection:
         if value_type == bytearray:
             return 'BLOB'
         if value_type == int:
-            if value.bit_length() > 64:
-                return 'BIGINT'
-            else:
-                return 'INTEGER'
+            return 'BIGINT' if value.bit_length() > 64 else 'INTEGER'
         if value_type == float:
             return 'FLOAT'
-        if value_type == bool:
-            return 'BOOLEAN'
-        return 'VARCHAR'
+        return 'BOOLEAN' if value_type == bool else 'VARCHAR'

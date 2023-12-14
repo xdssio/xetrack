@@ -4,7 +4,7 @@ import duckdb
 
 from .tracker import Tracker
 from .reader import Reader
-from .constants import TRACK_ID, TABLE
+from .config import SCHEMA_PARAMS, TRACKER_CONSTANTS
 
 
 def copy(source: str,
@@ -18,37 +18,39 @@ def copy(source: str,
 
     # if handle_duplicate not in ('IGNORE', 'REPLACE'):
     #     raise ValueError(f"Invalid handle_duplicate: {handle_duplicate} - Must be either IGNORE or REPLACE")
-    source = Tracker(db=source)
-    target = Tracker(db=target)
-    ids = target.conn.execute(  # type: ignore
+    source_tracker: Tracker = Tracker(db=source)
+    target_tracker: Tracker = Tracker(db=target)
+    ids = target_tracker.conn.execute(  # type: ignore
         "SELECT timestamp, track_id track_id FROM db.events").fetchall()  # type: ignore
     ids = set([f"{id[0]}-{id[1]}" for id in ids])  # type: ignore
-    results = source.conn.execute(f"SELECT * FROM {TABLE}").fetchall()
+    results = source_tracker.conn.execute(
+        f"SELECT * FROM {SCHEMA_PARAMS.TABLE}").fetchall()
     if len(results) == 0:
         print('No data to copy')
         return
     new_column_count = 0
-    for column, value in source.dtypes.items():
-        if column not in target._columns:
+    for column, value in source_tracker.dtypes.items():
+        if column not in target_tracker._columns:
             new_column_count += 1
-            target.add_column(column, value, source.to_sql_type(value))
-    keys = [column[1] for column in source.conn.execute(
-        f"PRAGMA table_info({TABLE})").fetchall()]
+            target_tracker.add_column(column, value)
+    keys = [column[1] for column in source_tracker.conn.execute(
+        f"PRAGMA table_info({SCHEMA_PARAMS.TABLE})").fetchall()]
     size = len(keys)
-    timestamp_ix, track_ix = keys.index('timestamp'), keys.index(TRACK_ID)
+    timestamp_ix, track_ix = keys.index(
+        TRACKER_CONSTANTS.TIMESTAMP), keys.index(SCHEMA_PARAMS.TRACK_ID)
     count = 0
-    target.conn.execute("BEGIN TRANSACTION")
+    target_tracker.conn.execute("BEGIN TRANSACTION")
     for event in results:
         if f"{event[timestamp_ix]}-{event[track_ix]}" in ids:
             continue
         count += 1
         values = list(event)
         with contextlib.suppress(duckdb.ConstraintException):
-            target.conn.execute(
-                f"INSERT INTO {TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
+            target_tracker.conn.execute(
+                f"INSERT INTO {SCHEMA_PARAMS.TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
                 values)
-    target.conn.execute("COMMIT TRANSACTION")
-    total = target.count_all()
+    target_tracker.conn.execute("COMMIT TRANSACTION")
+    total = target_tracker.count_all()
     print(
         f"Copied {count} events and {new_column_count} new columns. New total is {total} events")
     return count

@@ -1,5 +1,9 @@
+import datetime
+
+import pandas as pd
 from xetrack.connection import DuckDBConnection
-from xetrack.constants import TRACK_ID, TABLE
+from xetrack.config import SCHEMA_PARAMS
+from xetrack.logging import Logger
 from typing import Any, Optional
 import sqlite3
 
@@ -15,9 +19,9 @@ class Reader(DuckDBConnection):
             head (Optional[int], optional): The number of rows to return from the head of the table. Defaults to None.
             tail (Optional[int], optional): The number of rows to return from the tail of the table. Defaults to None.        
         """
-        query = f"SELECT * FROM {TABLE}"
+        query = f"SELECT * FROM {SCHEMA_PARAMS.TABLE}"
         if track_id is not None:
-            query += f" WHERE {TRACK_ID} = '{track_id}'"
+            query += f" WHERE {SCHEMA_PARAMS.TRACK_ID} = '{track_id}'"
         elif head is not None:
             query += f" LIMIT {head}"
         elif tail is not None:
@@ -26,7 +30,7 @@ class Reader(DuckDBConnection):
         return results.sort_values(by=['timestamp'])
 
     def latest(self):
-        latest_track_id = self.conn.execute(f"SELECT track_id FROM {TABLE} ORDER BY track_id DESC LIMIT 1"). \
+        latest_track_id = self.conn.execute(f"SELECT track_id FROM {SCHEMA_PARAMS.TABLE} ORDER BY track_id DESC LIMIT 1"). \
             fetchone()[0]
         return self.conn.execute(f"SELECT * FROM db.events WHERE track_id = '{latest_track_id}'").df()
 
@@ -44,18 +48,18 @@ class Reader(DuckDBConnection):
         """
         if key not in self.columns:
             self.conn.execute(
-                f"ALTER TABLE {TABLE} ADD COLUMN {key} {self.to_sql_type(value)}")
+                f"ALTER TABLE {SCHEMA_PARAMS.TABLE} ADD COLUMN {key} {self.to_sql_type(value)}")
 
-        query = f"UPDATE {TABLE} SET {key} = '{value}'"
+        query = f"UPDATE {SCHEMA_PARAMS.TABLE} SET {key} = '{value}'"
         if track_id is not None:
-            query += f" WHERE {TRACK_ID} = '{track_id}'"
+            query += f" WHERE {SCHEMA_PARAMS.TRACK_ID} = '{track_id}'"
 
         self.conn.execute(query)
 
     def set_where(self, key: str, value: Any, where_key: str, where_value: Any, track_id: Optional[str] = None):
-        SQL = f"""UPDATE {TABLE} SET {key} = '{value}' WHERE {where_key} = '{where_value}'"""
+        SQL = f"""UPDATE {SCHEMA_PARAMS.TABLE} SET {key} = '{value}' WHERE {where_key} = '{where_value}'"""
         if track_id is not None:
-            SQL += f" AND {TRACK_ID} = '{track_id}'"
+            SQL += f" AND {SCHEMA_PARAMS.TRACK_ID} = '{track_id}'"
         self.conn.execute(SQL)
 
     def delete_run(self, track_id: str):
@@ -76,5 +80,11 @@ class Reader(DuckDBConnection):
 
     def __len__(self):
         return self.conn.execute(
-            f"SELECT COUNT(*) FROM {TABLE}").fetchall()[
+            f"SELECT COUNT(*) FROM {SCHEMA_PARAMS.TABLE}").fetchall()[
             0][0]
+
+    @classmethod
+    def read_logs(cls, path: str, limit: Optional[int] = None) -> pd.DataFrame:
+        """Return a pandas dataframe of the logs in the given path"""
+        helper = Logger()
+        return pd.DataFrame(helper.read_logs(path, limit=limit))
