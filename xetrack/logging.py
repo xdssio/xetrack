@@ -3,7 +3,7 @@ import sys
 import json
 import os
 import pandas as pd
-from typing import Dict, Generator, Iterable, List, Optional, Union, Any
+from typing import Dict, List, Optional, Union, Any
 import re
 from xetrack.config import LOGURU_PARAMS
 
