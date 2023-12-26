@@ -34,34 +34,6 @@ class Reader(DuckDBConnection):
             fetchone()[0]
         return self.conn.execute(f"SELECT * FROM db.events WHERE track_id = '{latest_track_id}'").df()
 
-    def set_value(self, key: str, value: Any, track_id: Optional[str] = None):
-        """
-        Sets the value of a specific key in the database table.
-
-        Args:
-            key (Any): The key whose value needs to be set.
-            value (Any): The value to set for the specified key.
-            track_id (Optional[str], optional): The track ID used to identify the specific record in the table. Defaults to None.
-
-        Returns:
-            None
-        """
-        if key not in self.columns:
-            self.conn.execute(
-                f"ALTER TABLE {SCHEMA_PARAMS.TABLE} ADD COLUMN {key} {self.to_sql_type(value)}")
-
-        query = f"UPDATE {SCHEMA_PARAMS.TABLE} SET {key} = '{value}'"
-        if track_id is not None:
-            query += f" WHERE {SCHEMA_PARAMS.TRACK_ID} = '{track_id}'"
-
-        self.conn.execute(query)
-
-    def set_where(self, key: str, value: Any, where_key: str, where_value: Any, track_id: Optional[str] = None):
-        SQL = f"""UPDATE {SCHEMA_PARAMS.TABLE} SET {key} = '{value}' WHERE {where_key} = '{where_value}'"""
-        if track_id is not None:
-            SQL += f" AND {SCHEMA_PARAMS.TRACK_ID} = '{track_id}'"
-        self.conn.execute(SQL)
-
     def delete_run(self, track_id: str):
         """
         Using sqlite3 to remove rows

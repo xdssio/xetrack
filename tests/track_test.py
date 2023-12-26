@@ -70,3 +70,26 @@ def test_skip_insert():
     tracker.log(a=1, b=2)
     assert len(tracker.to_df()) == 0
     assert len(Reader.read_logs(logs)) == 1
+
+
+def test_track_assets():
+
+    class MLModel():
+        def __init__(self, name):
+            self.model = name
+            self.func = lambda x: x * 2
+
+        def predict(self, X: int) -> int:
+            return self.func(X)
+
+    tracker = Tracker(db=Tracker.IN_MEMROY, logs_stdout=True)
+
+    tracker.log(model=MLModel('model'))
+    tracker.log(model=MLModel('model2'))
+
+    df = tracker.to_df()
+    model_hash = df['model'].iloc[0]
+    assert tracker.get(model_hash).model == 'model'
+    tracker.remove_asset(model_hash, 'model')
+    assert tracker.get(model_hash) is None
+    assert tracker.to_df()['model'].iloc[0] is None

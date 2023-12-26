@@ -2,7 +2,7 @@ import sys
 import os
 from tempfile import TemporaryDirectory
 from dataclasses import dataclass
-from xetrack.assets import Assets
+from xetrack.assets import AssetsManager
 
 
 def generate_large_file(filename, size_in_mb):
@@ -24,20 +24,28 @@ def test_large_file_deduplication():
     filename = f'{tmp.name}/large_test_file.dat'
     size_in_mb = 10  # Size of the file in megabytes
     generate_large_file(filename, size_in_mb)
-    manager = Assets(f'{tmp.name}/db.db')
+    manager = AssetsManager(f'{tmp.name}/db.db')
 
     file_size = sys.getsizeof(f"{tmp.name}/large_test_file.dat")
     db_size = sys.getsizeof(f"{tmp.name}/db.db")
 
     with open(filename, 'rb') as f:
         content = f.read()
-    c = Content(content)  # type: ignore
+    content = Content(text=content)  # type: ignore
     names = ['file1', 'file2', 'file3']
+    hash_id = ''
     for name in names:
-        manager.insert(name, c)
+        hash_id = manager.insert(name, content)
 
-    retrieved_files = [manager.get(name) for name in names]
-    all_files_identical = all(
-        c == retrieved_file for retrieved_file in retrieved_files)
+    assert manager.get('file1')
+    assert manager.get(hash_id)
 
-    assert all_files_identical, "Test failed: Files retrieved are not identical"
+    assert all(
+        content == retrieved_file for retrieved_file in [manager.get(name) for name in names])
+
+    assert hash_id != manager.insert('file2', Content('file2'))
+
+    assert any(
+        content != retrieved_file
+        for retrieved_file in [manager.get(name) for name in names]
+    )

@@ -1,4 +1,3 @@
-from asyncore import read
 import typer
 from xetrack import Reader, copy as copy_db
 app = typer.Typer()

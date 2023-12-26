@@ -13,8 +13,9 @@ import random
 from duckdb import ConstraintException
 from xetrack.stats import Stats
 from xetrack.connection import DuckDBConnection
-from xetrack.config import CONSTANTS, LOGURU_PARAMS, SCHEMA_PARAMS, TRACKER_CONSTANTS
+from xetrack.config import CONSTANTS, SCHEMA_PARAMS, TRACKER_CONSTANTS
 from xetrack.logging import Logger
+from xetrack.assets import AssetsManager
 
 with contextlib.suppress(RuntimeError):
     multiprocessing.set_start_method('fork')
@@ -42,6 +43,7 @@ class Tracker(DuckDBConnection):
                  logs_path: Optional[str] = None,
                  logs_file_format: Optional[str] = None,
                  logs_stdout: bool = False,
+                 compress: bool = False
                  ):
         """
         Initializes the class instance.
@@ -77,6 +79,7 @@ class Tracker(DuckDBConnection):
         self.raise_on_error = raise_on_error
         self.measurement_interval = measurement_interval
         self.latest = None
+        self.assets = AssetsManager(path=db, compress=compress)
 
     def _build_logger(self, stdout: bool = False, logs_path: Optional[str] = None, logs_file_format: Optional[str] = None) -> Optional[Logger]:
         """
@@ -143,6 +146,9 @@ class Tracker(DuckDBConnection):
     def get_timestamp():
         return dt.now().strftime(CONSTANTS.TIMESTAMP_FORMAT)
 
+    def get(self, key: str):
+        return self.assets.get(key)
+
     def track_batch(self, data=List[dict]):
         """
         Track a batch of data.
@@ -178,6 +184,22 @@ class Tracker(DuckDBConnection):
                 self.logger.track(event_data)
         self.conn.execute("COMMIT TRANSACTION")
         self.latest = event_data
+
+    def remove_asset(self, hash_value: str, column: Optional[str]):
+        """Removes the asset stored in the database with the given hash. If a column is given, the value of that column will be set to None
+        Args:
+            hash_value (str): The hash of the asset to remove
+            column (Optional[str], optional): The column to set to None. Defaults to None.
+
+        Note:
+            A model removed is deleted from all runs - model assets are global
+        """
+        if self.assets.remove_hash(hash_value, remove_keys=True):
+            if column:
+                SQL = f"""UPDATE {SCHEMA_PARAMS.TABLE} SET {column} = NULL WHERE {column} = '{hash_value}'"""
+                self.conn.execute(SQL)
+            return True
+        return False
 
     @staticmethod
     def to_mb(bytes: int):
@@ -362,6 +384,9 @@ class Tracker(DuckDBConnection):
         key = key[:max_length]
         return key
 
+    def _validate_asset(self, key, value: Any) -> str:
+        return value if self._is_primitive(value) else self.assets.insert(key, value)
+
     def _validate_data(self, data: dict):
         if TRACKER_CONSTANTS.TIMESTAMP in data and self.logger:
             self.logger.warning(
@@ -369,7 +394,8 @@ class Tracker(DuckDBConnection):
         if SCHEMA_PARAMS.TRACK_ID in data and self.logger:
             self.logger.warning(
                 f"Overriding {SCHEMA_PARAMS.TRACK_ID} - please use another key")
-        data = {self._to_valid_key(key): value for key, value in data.items()}
+        data = {self._to_valid_key(key): self._validate_asset(
+            key, value) for key, value in data.items()}
         new_columns = set(data.keys()) - self._columns
         for key in new_columns:
             self.conn.execute(
@@ -399,6 +425,7 @@ class Tracker(DuckDBConnection):
                 self.logger.warning('No values to track')
             return data
         data = self._validate_data(data)
+        print(data)
         keys, values, size = self._to_key_values(data)
         if not self.skip_insert:
             self.conn.execute(
