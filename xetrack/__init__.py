@@ -39,6 +39,7 @@ def copy(source: str,
     timestamp_ix, track_ix = keys.index(
         TRACKER_CONSTANTS.TIMESTAMP), keys.index(SCHEMA_PARAMS.TRACK_ID)
     count = 0
+    raise NotImplementedError("need to implement assets too")
     target_tracker.conn.execute("BEGIN TRANSACTION")
     for event in results:
         if f"{event[timestamp_ix]}-{event[track_ix]}" in ids:
