@@ -57,9 +57,8 @@ class AssetsManager():
         if asset_hash not in self.assets:
             self.assets[asset_hash] = self._to_binary(asset_bytes)
         if asset_hash not in self.counts:
-            self.counts[asset_hash] = 1
-        else:
-            self.counts[asset_hash] += 1
+            self.counts[asset_hash] = 0
+        self.counts[asset_hash] += 1
         self.keys[key] = asset_hash
         return asset_hash
 

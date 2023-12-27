@@ -1,5 +1,3 @@
-from tempfile import NamedTemporaryFile
-
 from xetrack import Tracker, TRACKER_CONSTANTS
 
 
