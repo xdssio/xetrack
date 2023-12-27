@@ -16,7 +16,7 @@ def test_reader_to_df():
     tracker2 = Tracker(database)
 
     for i in range(5):
-        tracker.log(i=i)
+        tracker.log({"i": i})
 
     reader = Reader(database)
     assert len(reader.to_df(track_id=tracker2.track_id)) == 0
@@ -40,9 +40,9 @@ def test_reader():
     tempfile = NamedTemporaryFile()
     database = tempfile.name
     tracker = Tracker(database)
-    tracker.log(a=1, b=2)
+    tracker.log({"a": 1, "b": 2})
     tracker = Tracker(database)
-    tracker.log(a=1, c=2)
+    tracker.log({"a": 1, "c": 2})
     stats_process = mp.Process(target=read_db, args=(database,))
     stats_process.start()
     stats_process.join()
@@ -50,8 +50,8 @@ def test_reader():
 
 def test_reader_set_value():
     database = NamedTemporaryFile().name
-    Tracker(db=database, params={"model": 'lightgbm'}).log(accuracy=0.9)
-    Tracker(db=database, params={"model": 'lightgbm'}).log(accuracy=0.9)
+    Tracker(db=database, params={"model": 'lightgbm'}).log({"accuracy": 0.9})
+    Tracker(db=database, params={"model": 'lightgbm'}).log({"accuracy": 0.9})
 
     editor = Reader(database)
     latest = editor.latest().to_dict('records')[0]
@@ -68,8 +68,8 @@ def test_reader_set_value():
 
 def test_reader_set_where():
     database = NamedTemporaryFile().name
-    Tracker(db=database, params={"model": 'lightgbm'}).log(accuracy=0.9)
-    Tracker(db=database, params={"model": 'xgboost'}).log(accuracy=0.9)
+    Tracker(db=database, params={"model": 'lightgbm'}).log({"accuracy": 0.9})
+    Tracker(db=database, params={"model": 'xgboost'}).log({"accuracy": 0.9})
 
     editor = Reader(database)
     df = editor.to_df()
@@ -79,8 +79,8 @@ def test_reader_set_where():
                      'lightgbm', originals[0]['track_id'])
     edited = _extracted_from_test_reader_set_where(editor, 0.8, 0.9)
     Tracker(db=database, params={"model": 'lightgbm'},
-            reset=True).log(accuracy=0.9)
-    Tracker(db=database, params={"model": 'xgboost'}).log(accuracy=0.9)
+            reset=True).log({"accuracy": 0.9})
+    Tracker(db=database, params={"model": 'xgboost'}).log({"accuracy": 0.9})
     editor = Reader(database)
     editor.set_where('accuracy', 0.8, 'model', 'xgboost')
     edited = _extracted_from_test_reader_set_where(editor, 0.9, 0.8)
@@ -97,8 +97,8 @@ def _extracted_from_test_reader_set_where(editor, arg1, arg2):
 
 def test_reader_delete_run():
     database = NamedTemporaryFile().name
-    Tracker(db=database, params={"model": 'lightgbm'}).log(accuracy=0.9)
-    Tracker(db=database, params={"model": 'xgboost'}).log(accuracy=0.9)
+    Tracker(db=database, params={"model": 'lightgbm'}).log({"accuracy": 0.9})
+    Tracker(db=database, params={"model": 'xgboost'}).log({"accuracy": 0.9})
     editor = Reader(database)
     latest = editor.latest().to_dict('records')[0]
     assert len(editor) == 2
@@ -111,5 +111,6 @@ def test_reader_delete_run():
 
 def test_reader_logs():
     tempdir = TemporaryDirectory()
-    Tracker(db=Tracker.IN_MEMROY, logs_path=tempdir.name).log(accuracy=0.9)
+    Tracker(db=Tracker.IN_MEMROY, logs_path=tempdir.name).log(
+        {"accuracy": 0.9})
     assert len(Reader.read_logs(tempdir.name)) == 1

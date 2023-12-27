@@ -13,8 +13,13 @@ keywords = [
     "machine-learning",
     "duckdb",
     "pandas",
+    "sqlitedict", 
+    "xxhash",
+    "loguru"
+
 ]
 license = "BSD-3-Clause"
+url = "https://github.com/xdssio/xetrack"
 
 [tool.poetry.dependencies]
 python = "^3.9"
@@ -23,13 +28,12 @@ pandas = "^2.0.3"
 psutil = "^5.9.5"
 coolname = "^2.2.0"
 typer = "^0.9.0"
+sqlitedict = "^2.1.0"
+xxhash = "^3.4.1"
+loguru = "^0.7.0"
 
 [tool.poetry.extras]
-dev = ["pytest", "pyxet" ,"loguru"]
-loguru = ["loguru"]
-sqlitedict = ["sqlitedict", 'xxhash']
-
-
+dev = ["pytest", "scikit-learn"]
 
 [project]
 name = "xetrack"

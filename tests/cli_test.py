@@ -4,6 +4,7 @@ from xetrack.cli import app, copy, head, set, tail
 from typer.testing import CliRunner
 from xetrack import Reader, Tracker
 import shutil
+import cloudpickle
 
 runner = CliRunner()
 
@@ -13,7 +14,7 @@ def test_cli_head():
     db1 = f'{tempdir.name}/db1.db'
     source = Tracker(db1)
     for i in range(10):
-        source.log(i=i)
+        source.log({i: i})
     result = runner.invoke(app, args=['tail', db1])
     assert 'timestamp' in result.output and 'track_id' in result.output and 'i' in result.output
 
@@ -24,7 +25,7 @@ def test_cli_tail():
     source = Tracker(db1)
 # sourcery skip: no-loop-in-tests
     for i in range(10):
-        source.log(i=i)
+        source.log({i: i})
 
     result = runner.invoke(app, args=['tail', db1])
     assert 'timestamp' in result.output and 'track_id' in result.output and 'i' in result.output
@@ -35,14 +36,14 @@ def test_cli_copy():
     db1 = f'{tempdir.name}/db1.db'
     db2 = f'{tempdir.name}/db2.db'
     source = Tracker(db1)
-    source.log(a=1, b=1)
+    source.log({'a': 1, 'b': 1})
 
     shutil.copy(db1, db2)
     target = Tracker(db2)
 
-    source.log(a=2, c=2)
-    source.log(a=3, c=3)
-    target.log(a=4, c=4)
+    source.log({'a': 2, 'c': 2})
+    source.log({'a': 3, 'c': 3})
+    target.log({'a': 4, 'c': 4})
 
     source_size = len(source)
     target_size = len(target)
@@ -60,8 +61,8 @@ def test_cli_copy():
 
 def test_cli_delete():
     database = NamedTemporaryFile().name
-    Tracker(db=database, params={"model": 'lightgbm'}).log(accuracy=0.9)
-    Tracker(db=database, params={"model": 'xgboost'}).log(accuracy=0.9)
+    Tracker(db=database, params={"model": 'lightgbm'}).log({'accuracy': 0.9})
+    Tracker(db=database, params={"model": 'xgboost'}).log({'accuracy': 0.9})
     reader = Reader(database)
     latest = reader.latest().to_dict('records')[0]
     assert len(reader) == 2
@@ -75,8 +76,8 @@ def test_cli_delete():
 
 def test_cli_set_value():
     database = NamedTemporaryFile().name
-    Tracker(db=database, params={"model": 'lightgbm'}).log(accuracy=0.9)
-    Tracker(db=database, params={"model": 'lightgbm'}).log(accuracy=0.9)
+    Tracker(db=database, params={"model": 'lightgbm'}).log({"accuracy": 0.9})
+    Tracker(db=database, params={"model": 'lightgbm'}).log({"accuracy": 0.9})
 
     reader = Reader(database)
     latest = reader.latest().to_dict('records')[0]
@@ -94,8 +95,8 @@ def test_cli_set_value():
 
 def test_cli_where():
     database = NamedTemporaryFile().name
-    Tracker(db=database, params={"model": 'lightgbm'}).log(accuracy=0.9)
-    Tracker(db=database, params={"model": 'xgboost'}).log(accuracy=0.9)
+    Tracker(db=database, params={"model": 'lightgbm'}).log({"accuracy": 0.9})
+    Tracker(db=database, params={"model": 'xgboost'}).log({"accuracy": 0.9})
 
     reader = Reader(database)
     df = reader.to_df()
@@ -109,3 +110,33 @@ def test_cli_where():
     result = runner.invoke(
         app, args=['set', database, 'accuracy', '0.5'])
     edited = _extracted_from_test_reader_set_where(reader, 0.5, 0.5)
+
+
+def test_cli_get():
+    class MockObject:
+        def __init__(self, name):
+            self.name = name
+    database = NamedTemporaryFile().name
+    model_path = NamedTemporaryFile().name
+
+    result = Tracker(db=database, params={"model": 'lightgbm'}).log(
+        {"mock": MockObject('mock')})
+    result = runner.invoke(
+        app, args=['get', database, result['mock'], model_path])
+    assert result.exit_code == 0
+
+    with open(model_path, 'rb') as f:
+        obj = cloudpickle.load(f)
+    assert obj.name == 'mock'
+    assert isinstance(obj, MockObject)
+
+
+def test_cli_sql():
+    database = NamedTemporaryFile().name
+    result = Tracker(db=database, params={"model": 'lightgbm'}).log(
+        {"accuracy": 0.9})
+    result = runner.invoke(
+        app, args=['sql', database, "SELECT * FROM db.events;"])
+    assert result.exit_code == 0
+    assert 'accuracy' in result.output
+    assert '0.9' in result.output

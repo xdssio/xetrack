@@ -1,6 +1,5 @@
-import os
 import sqlite3
-from typing import Any
+from typing import Any, Optional
 import zlib
 from sqlitedict import encode_key, decode_key
 from sqlitedict import SqliteDict
@@ -19,7 +18,7 @@ class AssetsManager():
         self.compress = compress
         self.assets = SqliteDict(
             path, tablename=AssetsManager.ASSETS_TABLE_NAME,
-            autocommit=autocommit, encode=self.encode_bytes, decode=self.decode_bytes,
+            autocommit=autocommit, encode=self.encode_compress, decode=self.decode_compress,
             encode_key=encode_key, decode_key=decode_key)
         self.keys = SqliteDict(
             path, tablename=AssetsManager.KEYS_TABLE_NAME,
@@ -28,6 +27,11 @@ class AssetsManager():
         self.counts = SqliteDict(
             path, tablename=AssetsManager.COUNTS_TABLE_NAME,
             autocommit=autocommit)
+
+    def commit(self):
+        self.assets.commit()
+        self.keys.commit()
+        self.counts.commit()
 
     @staticmethod
     def hash_bytes(b: bytes) -> str:
@@ -38,12 +42,14 @@ class AssetsManager():
         return cloudpickle.dumps(asset)
 
     @staticmethod
-    def _from_bytes(asset_bytes: bytes) -> Any:
-        return cloudpickle.loads(asset_bytes)
+    def _from_bytes(asset_bytes: bytes) -> Optional[Any]:
+        if asset_bytes:
+            return cloudpickle.loads(asset_bytes)
 
     @staticmethod
-    def _to_binary(b: bytes) -> sqlite3.Binary:
-        return sqlite3.Binary(b)
+    def _to_binary(asset_bytes: bytes) -> Optional[sqlite3.Binary]:
+        if asset_bytes:
+            return sqlite3.Binary(asset_bytes)
 
     def insert(self, key: str, asset: Any) -> str:
         asset_bytes = self._to_bytes(asset)
@@ -103,13 +109,13 @@ class AssetsManager():
         self.remove(key)
         return ret or default
 
-    def encode_bytes(self, obj_bytes: bytes) -> sqlite3.Binary:
+    def encode_compress(self, obj_bytes: bytes) -> sqlite3.Binary:
         """deprecated"""
         if self.compress:
             obj_bytes = zlib.compress(obj_bytes)
         return sqlite3.Binary(obj_bytes)
 
-    def decode_bytes(self, obj: bytes) -> Any:
+    def decode_compress(self, obj: bytes) -> Any:
         """deprecated"""
         if obj:
             if self.compress:
