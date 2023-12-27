@@ -1,6 +1,6 @@
-from asyncore import read
 import typer
 from xetrack import Reader, copy as copy_db
+from xetrack.tracker import Tracker
 app = typer.Typer()
 
 
@@ -60,3 +60,42 @@ def set(db: str = typer.Argument(help='path to database'),
         reader.set_where(key, value, where_key, where_value, track_id)
     else:
         Reader(db).set_value(key, value, track_id=track_id)
+
+
+@app.command()
+def ls(db: str = typer.Argument(help='path to database'),
+       column: str = typer.Argument(None, help='column values to list'),
+       unique: bool = typer.Option(False, help='list unique values only'),
+       track_id: str = typer.Option(None, help='track ID to list')):
+    """List all the track IDs in the database"""
+    df = Reader(db).to_df(track_id=track_id)
+    if column is None:
+        typer.echo(df.columns.tolist())
+        return
+    values = df[column]
+    if unique:
+        import pandas as pd
+        values = pd.Series(values.unique(), name=column)
+    typer.echo(values.to_markdown())
+
+
+@app.command()
+def get(db: str = typer.Argument(help='path to database'),
+        key: str = typer.Argument(help='hash of model to retrive'),
+        output: str = typer.Argument(help='output to save the file to')):
+    tracker = Tracker(db)
+    asset = tracker.assets.assets.get(key)
+    if asset is None:
+        typer.echo(f'Asset {key} not found in database {db}')
+    else:
+        with open(output, 'wb') as f:
+            f.write(asset)
+        typer.echo(f'Asset {key} saved to {output}')
+
+
+@app.command()
+def sql(db: str = typer.Argument(help='path to database'),
+        query: str = typer.Argument(help='SQL query to execute')):
+    reader = Reader(db)
+    df = reader.conn.execute(query).df()
+    typer.echo(df.to_markdown())

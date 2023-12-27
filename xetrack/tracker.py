@@ -13,8 +13,9 @@ import random
 from duckdb import ConstraintException
 from xetrack.stats import Stats
 from xetrack.connection import DuckDBConnection
-from xetrack.config import CONSTANTS, LOGURU_PARAMS, SCHEMA_PARAMS, TRACKER_CONSTANTS
+from xetrack.config import CONSTANTS, SCHEMA_PARAMS, TRACKER_CONSTANTS
 from xetrack.logging import Logger
+from xetrack.assets import AssetsManager
 
 with contextlib.suppress(RuntimeError):
     multiprocessing.set_start_method('fork')
@@ -42,6 +43,7 @@ class Tracker(DuckDBConnection):
                  logs_path: Optional[str] = None,
                  logs_file_format: Optional[str] = None,
                  logs_stdout: bool = False,
+                 compress: bool = False
                  ):
         """
         Initializes the class instance.
@@ -76,7 +78,9 @@ class Tracker(DuckDBConnection):
         self.log_network_params = log_network_params
         self.raise_on_error = raise_on_error
         self.measurement_interval = measurement_interval
-        self.latest = None
+        self.latest = {}
+        self.assets = AssetsManager(
+            path=db, compress=compress, autocommit=True)
 
     def _build_logger(self, stdout: bool = False, logs_path: Optional[str] = None, logs_file_format: Optional[str] = None) -> Optional[Logger]:
         """
@@ -143,7 +147,10 @@ class Tracker(DuckDBConnection):
     def get_timestamp():
         return dt.now().strftime(CONSTANTS.TIMESTAMP_FORMAT)
 
-    def track_batch(self, data=List[dict]):
+    def get(self, key: str):
+        return self.assets.get(key)
+
+    def log_batch(self, data=List[dict]) -> Dict[str, Any]:
         """
         Track a batch of data.
 
@@ -164,20 +171,42 @@ class Tracker(DuckDBConnection):
         if not data:
             if self.logger:
                 self.logger.warning('No values to track')
-            return data
+            return {}
         event_data = {}
-        self.conn.execute("BEGIN TRANSACTION")
+
+        # first we commit the assets
+        raw = []
         for event in data:  # type: ignore
             event_data = self._validate_data(event)
-            keys, values, size = self._to_key_values(event_data)
+            raw.append(self._to_key_values(event_data))
+            if self.logger:
+                self.logger.track(event_data)
+
+        self.conn.execute("BEGIN TRANSACTION")
+        for keys, values, size in raw:  # type: ignore
             with contextlib.suppress(ConstraintException):
                 self.conn.execute(
                     f"INSERT INTO {SCHEMA_PARAMS.TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
                     values)
-            if self.logger:
-                self.logger.track(event_data)
         self.conn.execute("COMMIT TRANSACTION")
         self.latest = event_data
+        return event_data
+
+    def remove_asset(self, hash_value: str, column: Optional[str]):
+        """Removes the asset stored in the database with the given hash. If a column is given, the value of that column will be set to None
+        Args:
+            hash_value (str): The hash of the asset to remove
+            column (Optional[str], optional): The column to set to None. Defaults to None.
+
+        Note:
+            A model removed is deleted from all runs - model assets are global
+        """
+        if self.assets.remove_hash(hash_value, remove_keys=True):
+            if column:
+                SQL = f"""UPDATE {SCHEMA_PARAMS.TABLE} SET {column} = NULL WHERE {column} = '{hash_value}'"""
+                self.conn.execute(SQL)
+            return True
+        return False
 
     @staticmethod
     def to_mb(bytes: int):
@@ -335,7 +364,7 @@ class Tracker(DuckDBConnection):
             bytes_sent, bytes_recv = self._to_send_recv(
                 net_io_before, psutil.net_io_counters())  # type: ignore
             data.update({'bytes_sent': bytes_sent, 'bytes_recv': bytes_recv})
-        self.log(**data)
+        self.log(data)
         if exception is not None and self.raise_on_error:
             raise exception
         return result
@@ -350,7 +379,8 @@ class Tracker(DuckDBConnection):
             self.logger.warning(f'Column {key} already exists')
         return value
 
-    def _to_valid_key(self, key):
+    def _validate_key(self, key):
+        is_number = isinstance(key, (int, float))
         key = str(key)
         key = ALPHANUMERIC.sub('_', key)
 
@@ -360,16 +390,24 @@ class Tracker(DuckDBConnection):
         # Truncate the name if needed
         max_length = 64
         key = key[:max_length]
+        if is_number:
+            key = f'"{key}"'
         return key
 
-    def _validate_data(self, data: dict):
+    def _validate_asset(self, key, value: Any) -> str:
+        if self._is_primitive(value) or isinstance(value, (list, dict)):
+            return value  # type: ignore
+        return self.assets.insert(key, value)
+
+    def _validate_data(self, data: Dict[Union[str, int, float, bool], Any]) -> Dict[str, Any]:
         if TRACKER_CONSTANTS.TIMESTAMP in data and self.logger:
             self.logger.warning(
                 f"Overriding {TRACKER_CONSTANTS.TIMESTAMP} - please use another key")
         if SCHEMA_PARAMS.TRACK_ID in data and self.logger:
             self.logger.warning(
                 f"Overriding {SCHEMA_PARAMS.TRACK_ID} - please use another key")
-        data = {self._to_valid_key(key): value for key, value in data.items()}
+        data = {self._validate_key(key): self._validate_asset(
+            key, value) for key, value in data.items()}
         new_columns = set(data.keys()) - self._columns
         for key in new_columns:
             self.conn.execute(
@@ -392,13 +430,13 @@ class Tracker(DuckDBConnection):
             values.append(value)
         return keys, values, i + 1
 
-    def log(self, **data: Dict[Union[str, int, float, bool], Any]) -> Dict[str, Any]:
+    def log(self, data: dict) -> Dict[str, Any]:
         data_size = len(data)
         if data_size == 0:
             if self.logger:
                 self.logger.warning('No values to track')
-            return data
-        data = self._validate_data(data)
+            return {}
+        data = self._validate_data(data)  # type: ignore
         keys, values, size = self._to_key_values(data)
         if not self.skip_insert:
             self.conn.execute(
@@ -407,7 +445,7 @@ class Tracker(DuckDBConnection):
         if self.logger:
             self.logger.track(data)
         self.latest = data
-        return data
+        return data  # type: ignore
 
     def __repr__(self):
         return self.head().__repr__()
@@ -418,7 +456,7 @@ class Tracker(DuckDBConnection):
             query += f" WHERE {SCHEMA_PARAMS.TRACK_ID} = '{self.track_id}'"
         return self.conn.execute(query).df()
 
-    def __getitem__(self, item):
+    def __getitem__(self, item) -> Any:
         if isinstance(item, str):
             return self.conn.execute(f"SELECT {item} FROM {SCHEMA_PARAMS.TABLE} WHERE {SCHEMA_PARAMS.TRACK_ID} = '{self.track_id}'").df()[
                 item]
