@@ -29,7 +29,7 @@ class Tracker(DuckDBConnection):
     Tracker class for tracking experiments, benchmarks, and other events.
     You can set params which are always attached to every event, and then track any parameters you want.
     """
-    IN_MEMROY: str = ':memory:'
+    IN_MEMORY: str = ':memory:'
     SKIP_INSERT: str = 'SKIP_INSERT'
 
     def __init__(self, db: str = 'track.db',
@@ -64,7 +64,7 @@ class Tracker(DuckDBConnection):
         self.skip_insert = False
         if db == Tracker.SKIP_INSERT:
             self.skip_insert = True
-            db = Tracker.IN_MEMROY
+            db = Tracker.IN_MEMORY
         super().__init__(db=db)
         if params is None:
             params = {}

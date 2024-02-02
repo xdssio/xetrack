@@ -111,6 +111,6 @@ def test_reader_delete_run():
 
 def test_reader_logs():
     tempdir = TemporaryDirectory()
-    Tracker(db=Tracker.IN_MEMROY, logs_path=tempdir.name).log(
+    Tracker(db=Tracker.IN_MEMORY, logs_path=tempdir.name).log(
         {"accuracy": 0.9})
     assert len(Reader.read_logs(tempdir.name)) == 1

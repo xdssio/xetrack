@@ -2,7 +2,7 @@ from xetrack import Tracker, TRACKER_CONSTANTS
 
 
 def test_track_function():
-    tracker = Tracker(db=Tracker.IN_MEMROY, params={"model": 'lightgbm'})
+    tracker = Tracker(db=Tracker.IN_MEMORY, params={"model": 'lightgbm'})
 
     def foo(a: int, b: str):
         return a + len(b)
@@ -17,7 +17,7 @@ def test_track_function():
 
 def test_wrapper():
 
-    tracker = Tracker(db=Tracker.IN_MEMROY, params={"model": 'lightgbm'})
+    tracker = Tracker(db=Tracker.IN_MEMORY, params={"model": 'lightgbm'})
 
     @tracker.wrap(params={'name': 'foofoo'})
     def foo(a: int, b: str):

@@ -10,7 +10,7 @@ filterwarnings('ignore', category=ConvergenceWarning)
 
 
 def test_ml_example():
-    tracker = Tracker(Tracker.IN_MEMROY, params={
+    tracker = Tracker(Tracker.IN_MEMORY, params={
                       'dataset': 'iris', 'model': 'logistic regression'})
     iris = datasets.load_iris()
     X_train, X_test, y_train, y_test = train_test_split(

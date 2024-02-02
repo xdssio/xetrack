@@ -4,7 +4,7 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 
 def test_track_wrapper():
-    tracker = Tracker(db=Tracker.IN_MEMROY, params={
+    tracker = Tracker(db=Tracker.IN_MEMORY, params={
                       "model": 'lightgbm'}, reset=True)
 
     @tracker.wrap(params={'name': 'foo', 'function_time': 2})
@@ -82,7 +82,7 @@ def test_track_assets():
         def predict(self, X: int) -> int:
             return self.func(X)
 
-    tracker = Tracker(db=Tracker.IN_MEMROY, logs_stdout=True)
+    tracker = Tracker(db=Tracker.IN_MEMORY, logs_stdout=True)
 
     tracker.log({'model': MLModel('model')})
     tracker.log({'model': MLModel('model2')})

@@ -182,7 +182,7 @@ On great use-case is **model monitoring**.
 `logs_path='logs'` writes logs to a file
 
 ```python
-$ Tracker(db=Tracker.IN_MEMROY, logs_path='logs',logs_stdout=True).log({"accuracy":0.9})
+$ Tracker(db=Tracker.IN_MEMORY, logs_path='logs',logs_stdout=True).log({"accuracy":0.9})
 2023-12-14 21:46:55.290 | TRACKING | xetrack.logging:log:69!📁!{"a": 1, "b": 2, "timestamp": "2023-12-14 21:46:55.290098", "track_id": "marvellous-stork-4885"}
 
 $ Reader.read_logs(path='logs')
