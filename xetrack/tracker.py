@@ -43,7 +43,8 @@ class Tracker(DuckDBConnection):
                  logs_path: Optional[str] = None,
                  logs_file_format: Optional[str] = None,
                  logs_stdout: bool = False,
-                 compress: bool = False
+                 compress: bool = False,
+                 warnings: bool = True
                  ):
         """
         Initializes the class instance.
@@ -60,6 +61,8 @@ class Tracker(DuckDBConnection):
         :param logs_path: The path to the logs directory. If given, logs will be printed to that file.
         :param logs_file_format: The format of the logs file. Default is "{time:YYYY-MM-DD}.log" (daily). Only apply if logs_path is given.
         :param logs_stdout: If True, logs will be printed to stdout. Default is False.
+        :param compress: If True, the database will be compressed. Default is False.
+        :param warnings: If True, warnings will be printed. Default is True.
         """
         self.skip_insert = False
         if db == Tracker.SKIP_INSERT:
@@ -72,6 +75,7 @@ class Tracker(DuckDBConnection):
         self.track_id = track_id or self.generate_track_id()
         self.logger = self._build_logger(
             logs_stdout, logs_path, logs_file_format)
+        self.warnings = warnings and self.logger is not None
         self._columns = set()
         self._create_events_table(reset=reset)
         self.log_system_params = log_system_params
@@ -169,7 +173,7 @@ class Tracker(DuckDBConnection):
 
         """
         if not data:
-            if self.logger:
+            if self.warnings:
                 self.logger.warning('No values to track')
             return {}
         event_data = {}
@@ -249,7 +253,7 @@ class Tracker(DuckDBConnection):
         """
         if isinstance(result, dict):
             for value in (TRACKER_CONSTANTS.FUNCTION_TIME, TRACKER_CONSTANTS.FUNCTION_RESULT, TRACKER_CONSTANTS.FUNCTION_NAME):
-                if value in result and self.logger:  # we don't want to override the time
+                if value in result and self.warnings:  # we don't want to override the time
                     self.logger.warning(
                         f"Overriding {value}={result[value]} -> {data[value]}")
             data |= result
@@ -375,7 +379,7 @@ class Tracker(DuckDBConnection):
             self.conn.execute(
                 f"ALTER TABLE {SCHEMA_PARAMS.TABLE} ADD COLUMN {key} {dtype}")
             self._columns.add(key)
-        elif self.logger:
+        elif self.warnings:
             self.logger.warning(f'Column {key} already exists')
         return value
 
@@ -400,10 +404,10 @@ class Tracker(DuckDBConnection):
         return self.assets.insert(key, value)
 
     def _validate_data(self, data: Dict[Union[str, int, float, bool], Any]) -> Dict[str, Any]:
-        if TRACKER_CONSTANTS.TIMESTAMP in data and self.logger:
+        if TRACKER_CONSTANTS.TIMESTAMP in data and self.logger and self.warnings:
             self.logger.warning(
                 f"Overriding {TRACKER_CONSTANTS.TIMESTAMP} - please use another key")
-        if SCHEMA_PARAMS.TRACK_ID in data and self.logger:
+        if SCHEMA_PARAMS.TRACK_ID in data and self.logger and self.warnings:
             self.logger.warning(
                 f"Overriding {SCHEMA_PARAMS.TRACK_ID} - please use another key")
         data = {self._validate_key(key): self._validate_asset(
@@ -417,7 +421,7 @@ class Tracker(DuckDBConnection):
         for key, value in self.params.items():
             if key not in data:
                 data[key] = value
-            elif self.logger:
+            elif self.warnings:
                 self.logger.warning(f'Overriding the {key} parameter')
         data[TRACKER_CONSTANTS.TIMESTAMP] = self.get_timestamp()
         data[SCHEMA_PARAMS.TRACK_ID] = self.track_id
@@ -433,7 +437,7 @@ class Tracker(DuckDBConnection):
     def log(self, data: dict) -> Dict[str, Any]:
         data_size = len(data)
         if data_size == 0:
-            if self.logger:
+            if self.warnings:
                 self.logger.warning('No values to track')
             return {}
         data = self._validate_data(data)  # type: ignore

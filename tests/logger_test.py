@@ -44,10 +44,3 @@ def test_logs_to_file():
     tracker = Tracker(Tracker.IN_MEMORY, logs_path='logs', logs_stdout=True)
     tracker.log({"a": 1, "b": 2})
     tracker.track(lambda x: {'x': x * 2}, args=[2])
-
-
-def test_logs_to_file():
-    """ Test loguru logger """
-    tracker = Tracker(Tracker.IN_MEMORY, logs_path='logs', logs_stdout=True)
-    tracker.log({"a": 1, "b": 2})
-    tracker.track(lambda x: {'x': x * 2}, args=[2])

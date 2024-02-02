@@ -94,3 +94,15 @@ def test_track_assets():
     assert tracker.get(model_hash) is None
 
     assert pd.isna(tracker.to_df()['model'].iloc[0])
+
+
+def test_ignore_warnings():
+
+    tracker = Tracker(db=Tracker.IN_MEMORY, logs_stdout=True)
+    assert tracker.warnings
+    _ = tracker.log(data={})
+    tracker = Tracker(db=Tracker.IN_MEMORY, warnings=False)
+    assert not tracker.warnings
+    _ = tracker.log(data={})
+    tracker = Tracker(db=Tracker.IN_MEMORY, logs_stdout=False, warnings=True)
+    assert not tracker.warnings
