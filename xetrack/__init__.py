@@ -1,10 +1,13 @@
 import contextlib
+import importlib.metadata
 
 import duckdb
 
 from .reader import Reader
 from .tracker import Tracker
 from .config import SCHEMA_PARAMS, TRACKER_CONSTANTS
+
+__version__ = importlib.metadata.version("xetrack")
 
 
 def copy(source: str,
