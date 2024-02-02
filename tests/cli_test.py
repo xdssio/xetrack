@@ -3,6 +3,7 @@ from tests.reader_test import _extracted_from_test_reader_set_where
 from xetrack.cli import app, copy, head, set, tail
 from typer.testing import CliRunner
 from xetrack import Reader, Tracker
+import json
 import shutil
 import cloudpickle
 
@@ -15,8 +16,11 @@ def test_cli_head():
     source = Tracker(db1)
     for i in range(10):
         source.log({i: i})
-    result = runner.invoke(app, args=['tail', db1])
+    result = runner.invoke(app, args=['head', db1])
     assert 'timestamp' in result.output and 'track_id' in result.output and 'i' in result.output
+
+    result = runner.invoke(app, args=['head', db1, '--json'])
+    assert 'timestamp' in json.loads(result.output)[0]
 
 
 def test_cli_tail():
@@ -29,6 +33,19 @@ def test_cli_tail():
 
     result = runner.invoke(app, args=['tail', db1])
     assert 'timestamp' in result.output and 'track_id' in result.output and 'i' in result.output
+
+    result = runner.invoke(app, args=['tail', db1, '--json'])
+    assert 'timestamp' in json.loads(result.output)[0]
+
+
+def test_cli_columns():
+    tempdir = TemporaryDirectory()
+    db1 = f'{tempdir.name}/db1.db'
+    source = Tracker(db1)
+    for i in range(10):
+        source.log({i: i})
+    result = runner.invoke(app, args=['columns', db1])
+    assert 'timestamp' in result.output and 'track_id' in result.output and '0' in result.output
 
 
 def test_cli_copy():

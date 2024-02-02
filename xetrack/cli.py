@@ -1,24 +1,38 @@
 import typer
 from xetrack import Reader, copy as copy_db
 from xetrack.tracker import Tracker
+from json import dumps
 app = typer.Typer()
 
 
 @app.command()
 def head(db: str = typer.Argument(help='path to database'),
-         n: int = typer.Option(5, help="Number of lines to show")):
+         n: int = typer.Option(5, help="Number of lines to show"),
+         json: bool = typer.Option(False, help="Prettify the output as json")):
     """Show the first lines of the database evetns table"""
-    typer.echo(f"Showing the first {n} lines")
     df = Reader(db).to_df(head=n)
-    typer.echo(df.to_markdown())
+    result = dumps(df.to_dict(orient='records'),
+                   indent=4) if json else df.to_markdown()
+    typer.echo(result)
 
 
 @app.command()
 def tail(db: str = typer.Argument(help='path to database'),
-         n: int = typer.Option(5, help="Number of lines to show")):
+         n: int = typer.Option(5, help="Number of lines to show"),
+         json: bool = typer.Option(False, help="Prettify the output as json")):
     """Show the last lines of the database evetns table"""
     df = Reader(db).to_df(tail=n)
-    typer.echo(df.to_markdown())
+    result = dumps(df.to_dict(orient='records'),
+                   indent=4) if json else df.to_markdown()
+    typer.echo(result)
+
+
+@app.command()
+def columns(db: str = typer.Argument(help='path to database')):
+    """List the columns in the database"""
+    columns_list = list(Reader(db).to_df(head=1).columns)
+    typer.echo(f"Columns in {db}:\n")
+    typer.echo(columns_list)
 
 
 @app.command()
