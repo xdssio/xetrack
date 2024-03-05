@@ -1,5 +1,6 @@
 import logging
 from typing import Any, Optional
+from xetrack.assets import AssetsManager
 from xetrack.config import SCHEMA_PARAMS, CONSTANTS
 import duckdb
 
@@ -8,11 +9,18 @@ logger = logging.getLogger(__name__)
 
 
 class DuckDBConnection:
-    def __init__(self, db: str = 'track.db'):
+    def __init__(self, db: str = 'track.db',
+                 compress: bool = False):
+        """
+        Connect to a SQLlite database with DuckDB and setup the assets manager.
+
+        """
         logger.debug(f"Connecting to {db}")
         self.db = db
         self.table_name = SCHEMA_PARAMS.TABLE
         self.conn = self._init_connection()
+        self.assets = AssetsManager(
+            path=db, compress=compress, autocommit=True)
 
     def _init_connection(self):
         conn = duckdb.connect()
@@ -32,11 +40,11 @@ class DuckDBConnection:
 
     @property
     def dtypes(self):
-        return {column[0]: CONSTANTS._DTYPES_TO_PYTHON.get(column[1]) for column in
+        return {column[0]: CONSTANTS.DTYPES_TO_PYTHON.get(column[1]) for column in
                 self.conn.execute(f"DESCRIBE {SCHEMA_PARAMS.TABLE}").fetchall()}
 
     @staticmethod
-    def to_sql_type(value) -> str:
+    def to_sql_type(value: Any) -> str:
         """
         Convert a primitive Python value to its corresponding SQL type.
 
@@ -79,7 +87,24 @@ class DuckDBConnection:
 
     def set_where(self, key: str, value: Any, where_key: str, where_value: Any, track_id: Optional[str] = None):
         """Sets the value of a specific key in the database table given a where key value pair."""
-        SQL = f"""UPDATE {SCHEMA_PARAMS.TABLE} SET {key} = '{value}' WHERE {where_key} = '{where_value}'"""
+        sql = f"""UPDATE {SCHEMA_PARAMS.TABLE} SET {key} = '{value}' WHERE {where_key} = '{where_value}'"""
         if track_id is not None:
-            SQL += f" AND {SCHEMA_PARAMS.TRACK_ID} = '{track_id}'"
-        self.conn.execute(SQL)
+            sql += f" AND {SCHEMA_PARAMS.TRACK_ID} = '{track_id}'"
+        self.conn.execute(sql)
+
+    def remove_asset(self, hash_value: str, column: Optional[str], remove_keys: bool = True):
+        """Removes the asset stored in the database with the given hash. If a column is given, the value of that column will be set to None
+        Args:
+            hash_value (str): The hash of the asset to remove
+            column (Optional[str], optional): The column to set to None. Defaults to None.
+            remove_keys (bool, optional): Whether to remove the keys associated with the asset. Defaults to True.
+
+        Note:
+            A model removed is deleted from all runs - model assets are global
+        """
+        if self.assets.remove_hash(hash_value, remove_keys=remove_keys):
+            if column:
+                SQL = f"""UPDATE {SCHEMA_PARAMS.TABLE} SET {column} = NULL WHERE {column} = '{hash_value}'"""
+                self.conn.execute(SQL)
+            return True
+        return False

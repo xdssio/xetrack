@@ -106,3 +106,12 @@ def test_ignore_warnings():
     _ = tracker.log(data={})
     tracker = Tracker(db=Tracker.IN_MEMORY, logs_stdout=False, warnings=True)
     assert not tracker.warnings
+
+
+def test_git_info():
+    tracker = Tracker(db=Tracker.IN_MEMORY, logs_stdout=True, git_root='.')
+    latest = tracker.log({'a': 1})
+    assert latest.get('git_commit_hash')
+    assert len(latest.get('git_commit_hash')) == 40
+
+    tracker = Tracker(db=Tracker.IN_MEMORY, logs_stdout=True, git_root='..')

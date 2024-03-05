@@ -28,6 +28,9 @@ class AssetsManager():
             path, tablename=AssetsManager.COUNTS_TABLE_NAME,
             autocommit=autocommit)
 
+    def __len__(self):
+        return len(self.assets)
+
     def commit(self):
         self.assets.commit()
         self.keys.commit()

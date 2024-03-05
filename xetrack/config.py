@@ -16,7 +16,7 @@ class SCHEMA_PARAMS:
 
 class CONSTANTS:
 
-    _DTYPES_TO_PYTHON = {
+    DTYPES_TO_PYTHON = {
         'BOOLEAN': bool,
         'TINYINT': int,
         'SMALLINT': int,
@@ -45,6 +45,7 @@ class TRACKER_CONSTANTS:
     KWARGS: str = 'kwargs'
     ERROR: str = 'error'
     TIMESTAMP: str = 'timestamp'
+    GIT_COMMIT_KEY: str = 'git_commit_hash'
 
 
 class LOGURU_PARAMS():

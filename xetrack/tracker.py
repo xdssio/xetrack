@@ -15,8 +15,7 @@ from xetrack.stats import Stats
 from xetrack.connection import DuckDBConnection
 from xetrack.config import CONSTANTS, SCHEMA_PARAMS, TRACKER_CONSTANTS
 from xetrack.logging import Logger
-from xetrack.assets import AssetsManager
-
+from xetrack.git import get_commit_hash
 with contextlib.suppress(RuntimeError):
     multiprocessing.set_start_method('fork')
 
@@ -33,7 +32,7 @@ class Tracker(DuckDBConnection):
     SKIP_INSERT: str = 'SKIP_INSERT'
 
     def __init__(self, db: str = 'track.db',
-                 params=None,
+                 params: Dict[str, Any] | None = None,
                  reset: bool = False,
                  log_system_params: bool = True,
                  log_network_params: bool = True,
@@ -44,7 +43,8 @@ class Tracker(DuckDBConnection):
                  logs_file_format: Optional[str] = None,
                  logs_stdout: bool = False,
                  compress: bool = False,
-                 warnings: bool = True
+                 warnings: bool = True,
+                 git_root: Optional[str] = None,
                  ):
         """
         Initializes the class instance.
@@ -68,7 +68,7 @@ class Tracker(DuckDBConnection):
         if db == Tracker.SKIP_INSERT:
             self.skip_insert = True
             db = Tracker.IN_MEMORY
-        super().__init__(db=db)
+        super().__init__(db=db, compress=compress)
         if params is None:
             params = {}
         self.params = params
@@ -83,8 +83,10 @@ class Tracker(DuckDBConnection):
         self.raise_on_error = raise_on_error
         self.measurement_interval = measurement_interval
         self.latest = {}
-        self.assets = AssetsManager(
-            path=db, compress=compress, autocommit=True)
+        self.git_root = git_root
+        if git_root:
+            self.set_param(TRACKER_CONSTANTS.GIT_COMMIT_KEY,
+                           get_commit_hash(git_root=git_root))
 
     def _build_logger(self, stdout: bool = False, logs_path: Optional[str] = None, logs_file_format: Optional[str] = None) -> Optional[Logger]:
         """
@@ -195,22 +197,6 @@ class Tracker(DuckDBConnection):
         self.conn.execute("COMMIT TRANSACTION")
         self.latest = event_data
         return event_data
-
-    def remove_asset(self, hash_value: str, column: Optional[str]):
-        """Removes the asset stored in the database with the given hash. If a column is given, the value of that column will be set to None
-        Args:
-            hash_value (str): The hash of the asset to remove
-            column (Optional[str], optional): The column to set to None. Defaults to None.
-
-        Note:
-            A model removed is deleted from all runs - model assets are global
-        """
-        if self.assets.remove_hash(hash_value, remove_keys=True):
-            if column:
-                SQL = f"""UPDATE {SCHEMA_PARAMS.TABLE} SET {column} = NULL WHERE {column} = '{hash_value}'"""
-                self.conn.execute(SQL)
-            return True
-        return False
 
     @staticmethod
     def to_mb(bytes: int):

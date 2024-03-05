@@ -2,7 +2,7 @@ import contextlib
 import importlib.metadata
 
 import duckdb
-
+from loguru import logger
 from .reader import Reader
 from .tracker import Tracker
 from .config import SCHEMA_PARAMS, TRACKER_CONSTANTS
@@ -43,19 +43,25 @@ def copy(source: str,
     timestamp_ix, track_ix = keys.index(
         TRACKER_CONSTANTS.TIMESTAMP), keys.index(SCHEMA_PARAMS.TRACK_ID)
     count = 0
-    source_assets = source_tracker.assets
-    target_assets = target_tracker.assets
-    for key, hash_value in source_assets.keys.items():
-        target_assets.keys[key] = hash_value
-        if hash_value not in target_assets.assets:
-            target_assets.assets[hash_value] = source_assets.assets.get(
-                hash_value)
-            if hash_value not in target_assets.counts:
-                target_assets.counts[hash_value] = source_assets.counts.get(
+    if assets:
+        logger.info("Copying assets")
+        assets_count = 0
+        source_assets = source_tracker.assets
+        target_assets = target_tracker.assets
+        for key, hash_value in source_assets.keys.items():
+            target_assets.keys[key] = hash_value
+            if hash_value not in target_assets.assets:
+                target_assets.assets[hash_value] = source_assets.assets.get(
                     hash_value)
-            else:
-                target_assets.counts[hash_value] += source_assets.counts.get(
-                    hash_value)
+                if hash_value not in target_assets.counts:
+                    target_assets.counts[hash_value] = source_assets.counts.get(
+                        hash_value)
+                else:
+                    target_assets.counts[hash_value] += source_assets.counts.get(
+                        hash_value)
+                assets_count += 1
+        logger.info(f"Copied {assets_count} assets")
+    logger.info("Copying events")
     target_tracker.conn.execute("BEGIN TRANSACTION")
     for event in results:
         if f"{event[timestamp_ix]}-{event[track_ix]}" in ids:
@@ -68,6 +74,6 @@ def copy(source: str,
                 values)
     target_tracker.conn.execute("COMMIT TRANSACTION")
     total = target_tracker.count_all()
-    print(
+    logger.info(
         f"Copied {count} events and {new_column_count} new columns. New total is {total} events")
     return count

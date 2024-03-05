@@ -1,6 +1,6 @@
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from tests.reader_test import _extracted_from_test_reader_set_where
-from xetrack.cli import app, copy, head, set, tail
+from xetrack.cli import app
 from typer.testing import CliRunner
 from xetrack import Reader, Tracker
 import json
@@ -66,14 +66,21 @@ def test_cli_copy():
     target_size = len(target)
 
     result = runner.invoke(app, args=['copy', db2, db1])
-    assert 'Copied 1 events' in result.output
-    assert 'total is 4 events' in result.output
+    assert result.exit_code == 0
 
     result = runner.invoke(app, args=['copy', db1, db2])
-    assert 'Copied 2 events' in result.output
-    assert 'total is 4 events' in result.output
+    assert result.exit_code == 0
 
     assert len(Reader(db1)) == len(Reader(db2)) == 4
+
+    source.log({'object': object()})
+    assert len(source.assets) == 1
+    result = runner.invoke(app, args=['copy', db1, db2, '--no-assets'])
+    target_reader = Reader(db2)
+    assert len(Reader(db1)) == len(target_reader) == 5
+    assert len(target_reader.assets) == 0
+    result = runner.invoke(app, args=['copy', db1, db2, '--assets'])
+    assert len(target_reader.assets) == 1
 
 
 def test_cli_delete():
@@ -129,25 +136,6 @@ def test_cli_where():
     edited = _extracted_from_test_reader_set_where(reader, 0.5, 0.5)
 
 
-def test_cli_get():
-    class MockObject:
-        def __init__(self, name):
-            self.name = name
-    database = NamedTemporaryFile().name
-    model_path = NamedTemporaryFile().name
-
-    result = Tracker(db=database, params={"model": 'lightgbm'}).log(
-        {"mock": MockObject('mock')})
-    result = runner.invoke(
-        app, args=['get', database, result['mock'], model_path])
-    assert result.exit_code == 0
-
-    with open(model_path, 'rb') as f:
-        obj = cloudpickle.load(f)
-    assert obj.name == 'mock'
-    assert isinstance(obj, MockObject)
-
-
 def test_cli_sql():
     database = NamedTemporaryFile().name
     result = Tracker(db=database, params={"model": 'lightgbm'}).log(
@@ -157,3 +145,51 @@ def test_cli_sql():
     assert result.exit_code == 0
     assert 'accuracy' in result.output
     assert '0.9' in result.output
+
+
+def test_cli_assets_export():
+    class MockObject:
+        def __init__(self, name):
+            self.name = name
+    database = NamedTemporaryFile().name
+    model_path = NamedTemporaryFile().name
+
+    result = Tracker(db=database, params={"model": 'lightgbm'}).log(
+        {"mock": MockObject('mock')})
+    result = runner.invoke(
+        app, args=['assets', 'export', database, result['mock'], model_path])
+    assert result.exit_code == 0
+
+    with open(model_path, 'rb') as f:
+        obj = cloudpickle.load(f)
+    assert obj.name == 'mock'
+    assert isinstance(obj, MockObject)
+
+
+def test_cli_assets_delete():
+    class MockObject:
+        def __init__(self, name: str):
+            self.name: str = name
+
+    tempdir = TemporaryDirectory()
+    db: str = f'{tempdir.name}/db1.db'
+    source = Tracker(db)
+    log = source.log({'o1': MockObject('o1'), 'o2': MockObject('o2')})
+    assert len(source.assets) == 2
+    result = runner.invoke(app, args=['assets', 'delete', db, log['o1']])
+    result.exit_code == 0
+    len(Reader(db).assets) == len(source.assets) == 1
+
+
+def test_cli_assets_ls():
+    class MockObject:
+        def __init__(self, name: str):
+            self.name: str = name
+
+    tempdir = TemporaryDirectory()
+    db: str = f'{tempdir.name}/db1.db'
+    source = Tracker(db)
+    log = source.log({'o1': MockObject('o1'), 'o2': MockObject('o2')})
+    assert len(source.assets) == 2
+    result = runner.invoke(app, args=['assets', 'ls', db])
+    result.exit_code == 0

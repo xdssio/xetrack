@@ -120,9 +120,10 @@ $ model.score(X_test, y_test)
 ```
 
 You can retrive the model in CLI if you need only the model in production and mind carring the rest of the file
+
 ```bash
 # bash
-xt get database.db 53425a65a40a49f4 model.cloudpickle
+xt assets export database.db 53425a65a40a49f4 model.cloudpickle
 ```
 
 ```python
@@ -136,7 +137,7 @@ with open("model.cloudpickle", 'rb') as f:
 
 ### Tips and tricks
 
-* ```Tracker(Tracker.IN_MEMORY) ``` Let you run only in memory
+* ```Tracker(Tracker.IN_MEMORY) ``` Let you run only in memory - great for debuging or working with logs only
 
 ### Pandas-like
 
@@ -255,9 +256,12 @@ $ xt delete database.db ebony-loon-6720 # delete experiments wiht a given track_
 # run any other SQL in a oneliner
 $ xt sql database.db "SELECT * FROM db.events;"
 
-# retrive a model which was saved into a files as files using cloudpickle
-$ xt get database.db model hash  output 
+# retrive a model (any object) which was saved into a file using cloudpickle
+$ xt assets export database.db hash output 
+
+# remove an object from the assets
+$ xt assets delete database.db hash 
 
 # If you have two databases, and you want to merge one to the other
-$ xt copy source.db target.db 
+$ xt copy source.db target.db --assets/--no-assets
 ```

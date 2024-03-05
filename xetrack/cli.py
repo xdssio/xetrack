@@ -37,9 +37,10 @@ def columns(db: str = typer.Argument(help='path to database')):
 
 @app.command()
 def copy(source: str = typer.Argument(help='path to source database - will not be modified'),
-         target: str = typer.Argument(help='path to target database')):
+         target: str = typer.Argument(help='path to target database'),
+         assets: bool = typer.Option(True, help='copy the assets')):
     """Copy the data from one database to another"""
-    copy_db(source, target)
+    copy_db(source=source, target=target, assets=assets)
 
 
 @app.command()
@@ -94,22 +95,49 @@ def ls(db: str = typer.Argument(help='path to database'),
 
 
 @app.command()
-def get(db: str = typer.Argument(help='path to database'),
-        key: str = typer.Argument(help='hash of model to retrive'),
-        output: str = typer.Argument(help='output to save the file to')):
-    tracker = Tracker(db)
-    asset = tracker.assets.assets.get(key)
-    if asset is None:
-        typer.echo(f'Asset {key} not found in database {db}')
-    else:
-        with open(output, 'wb') as f:
-            f.write(asset)
-        typer.echo(f'Asset {key} saved to {output}')
-
-
-@app.command()
 def sql(db: str = typer.Argument(help='path to database'),
         query: str = typer.Argument(help='SQL query to execute')):
     reader = Reader(db)
     df = reader.conn.execute(query).df()
     typer.echo(df.to_markdown())
+
+
+assets_app = typer.Typer(short_help="A helper for assets managments")
+app.add_typer(assets_app, name="assets")
+
+
+@assets_app.command()
+def export(db: str = typer.Argument(help='path to database'),
+           key: str = typer.Argument(help='hash of model to retrive'),
+           output: str = typer.Argument(help='output to save the file to')):
+    """Export an asset from the database to a file."""
+    tracker = Reader(db)
+    asset = tracker.assets.assets.get(key)
+    if asset is None:
+        typer.echo(f'Asset {key} not found in database {db}')
+    else:
+        with open(output, 'wb') as f:
+            f.write(asset)  # type: ignore
+        typer.echo(f'Asset {key} saved to {output}')
+
+
+@assets_app.command()
+def delete(db: str = typer.Argument(help='path to database'),
+           asset: str = typer.Argument(help='Asset hash to delete'),
+           column: str = typer.Option(
+    None, help='Column to set to None'),
+    remove_keys: bool = typer.Option(
+    True, help='Remove the keys associated with the asset')
+):
+    """Delete a specific run from the database"""
+    Reader(db).remove_asset(asset, column, remove_keys)
+
+
+@assets_app.command()
+def ls(db: str = typer.Argument(help='path to database')):
+    """list all the assets in the database"""
+    typer.echo(f"Assets in {db}:\n")
+    typer.echo("Key: Hash")
+    typer.echo("----")
+    for key, hash in Reader(db).assets.keys.items():
+        typer.echo(f"{key}: {hash}")
