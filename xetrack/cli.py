@@ -1,3 +1,4 @@
+from typing import List
 import typer
 from xetrack import Reader, copy as copy_db
 from xetrack.tracker import Tracker
@@ -97,6 +98,7 @@ def ls(db: str = typer.Argument(help='path to database'),
 @app.command()
 def sql(db: str = typer.Argument(help='path to database'),
         query: str = typer.Argument(help='SQL query to execute')):
+    """Execute a SQL query on the database and show the results as a markdown table - consider that the events table is 'db.events'\n\nExample: xt sql path/to/database.db 'SELECT * FROM db.events LIMIT 5' """
     reader = Reader(db)
     df = reader.conn.execute(query).df()
     typer.echo(df.to_markdown())
@@ -141,3 +143,77 @@ def ls(db: str = typer.Argument(help='path to database')):
     typer.echo("----")
     for key, hash in Reader(db).assets.keys.items():
         typer.echo(f"{key}: {hash}")
+
+
+plot_app = typer.Typer(
+    short_help="A helper for plots using bashplotlib (requires bashplotlib)")
+app.add_typer(plot_app, name="plot")
+
+
+@plot_app.command()
+def hist(db: str = typer.Argument(help='path to database'),
+         column: str = typer.Argument(help='column to plot'),
+         bins: int = typer.Option(None, help='number of bins'),
+         width: int = typer.Option(None, help='width of the plot'),
+         height: int = typer.Option(None, help='height of the plot'),
+         pch: str = typer.Option('o', help='point character'),
+         colour: str = typer.Option('white', help='colour of the plot'),
+         xlab: bool = typer.Option(False, help='show x label'),
+         summary: bool = typer.Option(True, help='show summary'),
+         title: str = typer.Option(None, help='title of the plot')):
+    """Plot a histogram of the given column"""
+    from xetrack.bashplotlib import plot_hist
+    plot_hist(db, column, bins, width, height,
+              pch, colour, xlab, summary, title)
+
+
+@plot_app.command()
+def scatter(db: str = typer.Argument(help='path to database'),
+            x: str = typer.Argument(help='x column'),
+            y: str = typer.Argument(help='y column'),
+            pch: str = typer.Option('o', help='point character'),
+            size: int = typer.Option(20, help='size of the points'),
+            title: str = typer.Option(None, help='title of the plot'),
+            colour: str = typer.Option('white', help='colour of the plot')):
+    """Plot a scatter plot of the given columns"""
+    from xetrack.bashplotlib import plot_scatter
+    plot_scatter(db, x, y, pch, size, title, colour)
+
+
+stats_app = typer.Typer(
+    short_help="A helper for basic stats")
+app.add_typer(stats_app, name="stats")
+
+
+def _get_df(db: str, columns: str = ''):
+    df = Reader(db).to_df()
+    if columns != '':
+        columns = columns.split(',')
+        df = df[columns]
+    return df
+
+
+@stats_app.command()
+def describe(db: str = typer.Argument(help='path to database'),
+             columns: str = typer.Option('', help='columns to describe - comma separated list (e.g. "col1,col2,col3")')):
+    """Describe columns in the database - use either numeric or categorical columns."""
+    df = _get_df(db, columns)
+    typer.echo(df.describe().to_markdown())
+
+
+@stats_app.command()
+def top(db: str = typer.Argument(help='path to database'),
+        column: str = typer.Argument(help='Entry with best value')):
+    """Get the maximum value in the column"""
+    df = _get_df(db)
+    df = df[df[column] == df[column].max()]
+    typer.echo(df.to_markdown())
+
+
+@stats_app.command()
+def bottom(db: str = typer.Argument(help='path to database'),
+           column: str = typer.Argument(help='Entry with best value')):
+    """Get the maximum value in the column"""
+    df = _get_df(db)
+    df = df[df[column] == df[column].min()]
+    typer.echo(df.to_markdown())

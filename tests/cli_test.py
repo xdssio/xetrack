@@ -4,6 +4,7 @@ from xetrack.cli import app
 from typer.testing import CliRunner
 from xetrack import Reader, Tracker
 import json
+import numpy as np
 import shutil
 import cloudpickle
 
@@ -193,3 +194,20 @@ def test_cli_assets_ls():
     assert len(source.assets) == 2
     result = runner.invoke(app, args=['assets', 'ls', db])
     result.exit_code == 0
+
+
+def test_cli_bashplotlib():
+    tempdir = TemporaryDirectory()
+    db: str = f'{tempdir.name}/db1.db'
+    source = Tracker(db)
+    y_data = np.random.normal(loc=1, scale=10, size=1000)
+    x_data = np.random.normal(loc=2, scale=20, size=1000)
+    for x, y in zip(x_data, y_data):
+        _ = source.log({'x': float(x), 'y': float(y)})
+    result = runner.invoke(app, args=['plot', 'hist', db, 'x'])
+    assert result.exit_code == 0
+    assert 'Summary' in result.output
+
+    result = runner.invoke(app, args=['plot', 'scatter', db, 'x', 'y'])
+    assert result.exit_code == 0
+    assert 'x vs y ' in result.output

@@ -264,4 +264,38 @@ $ xt assets delete database.db hash
 
 # If you have two databases, and you want to merge one to the other
 $ xt copy source.db target.db --assets/--no-assets
+
+# Stats
+$ xt describe database.db --columns=x,y,z
+
+$ xt stats top/bottom database.db x # print the entry with the top/bottom result of a value
+
+# bashplotlib (`pip install bashplotlib` is required)
+$ xt plot hist database.db x
+    ----------------------
+    |    x histogram     |
+    ----------------------
+
+ 225|      o
+ 200|     ooo
+ 175|     ooo
+ 150|     ooo
+ 125|     ooo
+ 100|    ooooo
+  75|    ooooo
+  50|    ooooo
+  25|   ooooooo
+   1| oooooooooo
+     ----------
+
+-----------------------------------
+|             Summary             |
+-----------------------------------
+|        observations: 1000       |
+|      min value: -56.605967      |
+|         mean : 2.492545         |
+|       max value: 75.185944      |
+-----------------------------------
+$ xt plot scatter database.db x y
+
 ```
