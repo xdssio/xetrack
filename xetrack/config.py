@@ -11,57 +11,58 @@ class ClassProperty:
 
 class SCHEMA_PARAMS:
     TABLE: str = "db.events"
-    TRACK_ID: str = 'track_id'
+    TRACK_ID: str = "track_id"
+    EVENTS_TABLE: str = "events"
 
 
 class CONSTANTS:
 
     DTYPES_TO_PYTHON = {
-        'BOOLEAN': bool,
-        'TINYINT': int,
-        'SMALLINT': int,
-        'INTEGER': int,
-        'BIGINT': int,
-        'FLOAT': float,
-        'DOUBLE': float,
-        'VARCHAR': str,
-        'CHAR': str,
-        'BLOB': bytearray,
-        'DATE': str,
-        'TIME': str,
-        'TIMESTAMP': str,
-        'DECIMAL': float,
-        'INTERVAL': str,
-        'UUID': str
+        "BOOLEAN": bool,
+        "TINYINT": int,
+        "SMALLINT": int,
+        "INTEGER": int,
+        "BIGINT": int,
+        "FLOAT": float,
+        "DOUBLE": float,
+        "VARCHAR": str,
+        "CHAR": str,
+        "BLOB": bytearray,
+        "DATE": str,
+        "TIME": str,
+        "TIMESTAMP": str,
+        "DECIMAL": float,
+        "INTERVAL": str,
+        "UUID": str,
     }
-    TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
+    TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 
 class TRACKER_CONSTANTS:
-    FUNCTION_NAME: str = 'function_name'
-    FUNCTION_TIME: str = 'function_time'
-    FUNCTION_RESULT: str = 'function_result'
-    ARGS: str = 'args'
-    KWARGS: str = 'kwargs'
-    ERROR: str = 'error'
-    TIMESTAMP: str = 'timestamp'
-    GIT_COMMIT_KEY: str = 'git_commit_hash'
+    FUNCTION_NAME: str = "function_name"
+    FUNCTION_TIME: str = "function_time"
+    FUNCTION_RESULT: str = "function_result"
+    ARGS: str = "args"
+    KWARGS: str = "kwargs"
+    ERROR: str = "error"
+    TIMESTAMP: str = "timestamp"
+    GIT_COMMIT_KEY: str = "git_commit_hash"
 
 
-class LOGURU_PARAMS():
-    ROTATION: str = '1 day'
-    EXPERIMENT: str = 'EXPERIMENT'
-    MONITOR: str = 'MONITOR'
-    TRACKING: str = 'TRACKING'
-    LEVEL: str = 'level'
-    TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M:%S'
-    LOG_FILE_FORMAT = '{time:YYYY-MM-DD}.log'
-    STRACTURED_REGEX = r'\b(MONITOR|EXPERIMENT|TRACKING)\b'
+class LOGURU_PARAMS:
+    ROTATION: str = "1 day"
+    EXPERIMENT: str = "EXPERIMENT"
+    MONITOR: str = "MONITOR"
+    TRACKING: str = "TRACKING"
+    LEVEL: str = "level"
+    TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
+    LOG_FILE_FORMAT = "{time:YYYY-MM-DD}.log"
+    STRACTURED_REGEX = r"\b(MONITOR|EXPERIMENT|TRACKING)\b"
 
     @ClassProperty
     @classmethod
     def DELIMITER(cls) -> str:
-        return os.getenv('LOGS_DELIMITER', '!📁!')
+        return os.getenv("LOGS_DELIMITER", "!📁!")
 
     @ClassProperty
     @classmethod
