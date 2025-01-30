@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "xetrack"
-version = "0.3.1"
+version = "0.3.2"
 description = "A simple tool for benchamrking and tracking machine learning models and experiments."
 readme = "README.md"
 packages = [{ include = "xetrack" }]
@@ -23,16 +23,16 @@ license = "BSD-3-Clause"
 
 [tool.poetry.dependencies]
 python = "^3.9"
-duckdb = "^0.10.0"
-pandas = "^2.0.3"
-psutil = "^5.9.5"
-coolname = "^2.2.0"
-typer = "^0.9.0"
-sqlitedict = "^2.1.0"
-xxhash = "^3.4.1"
-loguru = "^0.7.0"
-tabulate = "^0.9.0"
-cloudpickle = "^2.0.0"
+duckdb = ">=0.10.0"
+pandas = ">=2.0.3"
+psutil = ">=5.9.5"
+coolname = ">=2.2.0"
+typer = ">=0.9.0"
+sqlitedict = ">=2.1.0"
+xxhash = ">=3.4.1"
+loguru = ">=0.7.0"
+tabulate = ">=0.9.0"
+cloudpickle = ">=2.0.0"
 
 [tool.poetry.extras]
 dev = ["pytest", "scikit-learn"]
