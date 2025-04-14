@@ -154,8 +154,8 @@ tracker.to_df() # get pandas dataframe of current run
 
 ### SQL-like
 You can filter the data using SQL-like syntax using [duckdb](https://duckdb.org/docs):
+* The sqlite database is attached as **db** and the table is **events**. Assts are in the **assets** table.   
 
-* The sqlite database is attached as **db** and the table is **events**. Assts are in the **assets** table.
 
 #### Python
 ```python
@@ -163,9 +163,22 @@ tracker.conn.execute(f"SELECT * FROM db.events WHERE accuracy > 0.8").fetchall()
 ```
 
 #### Duckdb CLI
+* Install: `curl https://install.duckdb.org | sh`   
+* If duckdb>=1.2.2, you can use [duckdb local ui](https://duckdb.org/2025/03/12/duckdb-ui.html)    
+
 ```bash
-duckdb
-D ATTACH 'database.db' AS db (TYPE sqlite);
+$ duckdb -ui
+┌──────────────────────────────────────┐
+│                result                │
+│               varchar                │
+├──────────────────────────────────────┤
+│ UI started at http://localhost:4213/ │
+└──────────────────────────────────────┘
+
+D INSTALL sqlite; LOAD sqlite; ATTACH 'database.db' AS db (TYPE sqlite);
+# navigate browser to http://localhost:4213/
+
+# or run directly in terminal
 D SELECT * FROM db.events;
 ┌────────────────────────────┬──────────────────┬──────────┬───────┬──────────┬────────┐
 │         timestamp          │     track_id     │  model   │ epoch │ accuracy │  loss  │
