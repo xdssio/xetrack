@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from xetrack.assets import AssetsManager
 
 
-def generate_large_file(filename, size_in_mb):
+def generate_large_file(filename: str, size_in_mb: int):
     """ Generates a large file with random contents. """
     with open(filename, 'wb') as f:
         f.write(os.urandom(size_in_mb * 1024 * 1024))

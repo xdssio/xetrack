@@ -1,10 +1,8 @@
 import sqlite3
 from typing import Any, Optional
 import zlib
-from sqlitedict import encode_key, decode_key
-from sqlitedict import SqliteDict
+from sqlitedict import encode_key, decode_key, SqliteDict
 import cloudpickle
-import zlib
 import xxhash
 
 
@@ -65,16 +63,16 @@ class AssetsManager():
         self.keys[key] = asset_hash
         return asset_hash
 
-    def get_from_hash(self, asset_hash: str, default=None) -> Any:
-        return self._from_bytes(self.assets.get(asset_hash, None) or default)
+    def get_from_hash(self, asset_hash: str, default:str|None=None) -> Any:
+        return self._from_bytes(self.assets.get(asset_hash, None) or default) # type: ignore
 
-    def get_from_key(self, key: str, default=None) -> Any:
+    def get_from_key(self, key: str, default:str|None=None) -> Any:
         """Returns the asset stored in the database with the given key. If the key does not exist, returns the default value"""
         if hash_candidate := self.keys.get(key, None):
-            return self.get_from_hash(hash_candidate, default=default)
+            return self.get_from_hash(hash_candidate, default=default) # type: ignore
         return default
 
-    def get(self, key: str, default=None) -> Any:
+    def get(self, key: str, default:str|None=None) -> Any:
         return self.get_from_key(key) or self.get_from_hash(key) or default
 
     def remove(self, key: str):

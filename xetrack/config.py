@@ -1,14 +1,6 @@
 import os
 
 
-class ClassProperty:
-    def __init__(self, fget):
-        self.fget = fget
-
-    def __get__(self, cls, owner):
-        return self.fget.__get__(None, owner)()
-
-
 class SCHEMA_PARAMS:
     TABLE: str = "db.events"
     TRACK_ID: str = "track_id"
@@ -49,25 +41,27 @@ class TRACKER_CONSTANTS:
     GIT_COMMIT_KEY: str = "git_commit_hash"
 
 
-class LOGURU_PARAMS:
+class LoggerMeta(type):
+    @property
+    def DELIMITER(cls) -> str:
+        """Get the delimiter for structured logs."""
+        return os.getenv("LOGS_DELIMITER", "!📁!")
+
+    @property
+    def FORMAT(cls) -> str:
+        """Get the log format with the delimiter."""
+        delimiter = cls.DELIMITER
+        prefix = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan>"
+        suffix = "<level>{message}</level>"
+        return f"{prefix}{delimiter}{suffix}"
+
+
+class LOGURU_PARAMS(metaclass=LoggerMeta):
     ROTATION: str = "1 day"
     EXPERIMENT: str = "EXPERIMENT"
     MONITOR: str = "MONITOR"
     TRACKING: str = "TRACKING"
     LEVEL: str = "level"
-    TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
-    LOG_FILE_FORMAT = "{time:YYYY-MM-DD}.log"
-    STRACTURED_REGEX = r"\b(MONITOR|EXPERIMENT|TRACKING)\b"
-
-    @ClassProperty
-    @classmethod
-    def DELIMITER(cls) -> str:
-        return os.getenv("LOGS_DELIMITER", "!📁!")
-
-    @ClassProperty
-    @classmethod
-    def FORMAT(cls) -> str:
-        delimiter = cls.DELIMITER
-        prefix = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan>"
-        suffix = "<level>{message}</level>"
-        return f"{prefix}{delimiter}{suffix}"
+    TIMESTAMP_FORMAT: str = "%Y-%m-%d %H:%M:%S"
+    LOG_FILE_FORMAT: str = "{time:YYYY-MM-DD}.log"
+    STRACTURED_REGEX: str = r"\b(MONITOR|EXPERIMENT|TRACKING)\b"
