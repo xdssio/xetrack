@@ -10,7 +10,7 @@ try:
 except ImportError:
     raise ImportError("sqlitedict is not installed. Please install it with `pip install sqlitedict`")
 
-class AssetsManager():
+class AssetsManager:
     ASSETS_TABLE_NAME = 'assets'
     KEYS_TABLE_NAME = 'keys'
     COUNTS_TABLE_NAME = 'counts'

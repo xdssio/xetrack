@@ -243,6 +243,19 @@ class Tracker:
         return dt.now().strftime(CONSTANTS.TIMESTAMP_FORMAT)
 
     def get(self, key: str):
+        """
+        Get an asset by key.
+        
+        Args:
+            key: The key of the asset to retrieve
+            
+        Returns:
+            The asset if found, None otherwise
+        """
+        if self.assets is None:
+            if self.warnings:
+                self.logger.warning("Assets functionality disabled: sqlitedict not installed")
+            return None
         return self.assets.get(key)
 
     def log_batch(self, data: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -548,6 +561,12 @@ class Tracker:
     def _validate_asset(self, key, value: Any) -> str:
         if self._is_primitive(value) or isinstance(value, (list, dict)):
             return value  # type: ignore
+        
+        if self.assets is None:
+            if self.warnings:
+                self.logger.warning("Assets functionality disabled: sqlitedict not installed")
+            return str(value)
+            
         return self.assets.insert(key, value)
 
     def _validate_data(
@@ -821,8 +840,8 @@ class Tracker:
         return self._len
 
     def __del__(self):
-        if hasattr(self, "conn"):
-            self.conn.close()
+        if hasattr(self, "engine") and hasattr(self.engine, "conn"):
+            self.engine.conn.close()
 
     def to_csv(self, path: str, all: bool = False):
         return self.to_df(all).to_csv(path, index=False)

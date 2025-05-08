@@ -1,4 +1,3 @@
-import contextlib
 import logging
 import os
 from typing import Any, Optional, List, Dict
@@ -212,6 +211,10 @@ class DuckDBConnection(Connection[duckdb.DuckDBPyConnection]):
         Returns:
             True if the asset was removed, False otherwise.
         """
+        if self.assets is None:
+            logger.warning("Assets functionality disabled: sqlitedict not installed")
+            return False
+            
         if self.assets.remove_hash(hash_value, remove_keys=remove_keys):
             if column:
                 sql = f"UPDATE {SCHEMA_PARAMS.DUCKDB_TABLE} SET {column} = NULL WHERE {column} = ?"
