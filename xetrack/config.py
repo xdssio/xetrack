@@ -2,10 +2,14 @@ import os
 
 
 class SCHEMA_PARAMS:
-    TABLE: str = "db.events"
+    DUCKDB_TABLE: str = "db.events"
+    SQLITE_TABLE: str = "events"
     TRACK_ID: str = "track_id"
     EVENTS_TABLE: str = "events"
 
+
+class DEFAULTS:
+    DB: str = "track.db"
 
 class CONSTANTS:
 

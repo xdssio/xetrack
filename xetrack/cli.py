@@ -1,7 +1,8 @@
-from typing import List
+from typing import Literal, Union
+from pandas.core.frame import DataFrame
+from pip._internal.utils.misc import hide_value
 import typer
 from xetrack import Reader, copy as copy_db
-from xetrack.tracker import Tracker
 from json import dumps
 app = typer.Typer()
 
@@ -9,9 +10,11 @@ app = typer.Typer()
 @app.command()
 def head(db: str = typer.Argument(help='path to database'),
          n: int = typer.Option(5, help="Number of lines to show"),
-         json: bool = typer.Option(False, help="Prettify the output as json")):
+         json: bool = typer.Option(False, help="Prettify the output as json"),
+         engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """Show the first lines of the database evetns table"""
-    df = Reader(db).to_df(head=n)
+    engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
+    df = Reader(db, engine=engine_literal).to_df(head=n)
     result = dumps(df.to_dict(orient='records'),
                    indent=4) if json else df.to_markdown()
     typer.echo(result)
@@ -20,18 +23,22 @@ def head(db: str = typer.Argument(help='path to database'),
 @app.command()
 def tail(db: str = typer.Argument(help='path to database'),
          n: int = typer.Option(5, help="Number of lines to show"),
-         json: bool = typer.Option(False, help="Prettify the output as json")):
+         json: bool = typer.Option(False, help="Prettify the output as json"),
+         engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """Show the last lines of the database evetns table"""
-    df = Reader(db).to_df(tail=n)
+    engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
+    df = Reader(db, engine=engine_literal).to_df(tail=n)
     result = dumps(df.to_dict(orient='records'),
                    indent=4) if json else df.to_markdown()
     typer.echo(result)
 
 
 @app.command()
-def columns(db: str = typer.Argument(help='path to database')):
+def columns(db: str = typer.Argument(help='path to database'),
+            engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """List the columns in the database"""
-    columns_list = list(Reader(db).to_df(head=1).columns)
+    engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
+    columns_list = list(Reader(db, engine=engine_literal).to_df(head=1).columns)
     typer.echo(f"Columns in {db}:\n")
     typer.echo(columns_list)
 
@@ -46,19 +53,22 @@ def copy(source: str = typer.Argument(help='path to source database - will not b
 
 @app.command()
 def delete(db: str = typer.Argument(help='path to database'),
-           track_id: str = typer.Argument(help='track ID to delete')):
+           track_id: str = typer.Argument(help='track ID to delete'),
+           engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """Delete a specific run from the database"""
-    Reader(db).delete_run(track_id)
+    engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
+    Reader(db, engine=engine_literal).delete_run(track_id)
 
 
 @app.command()
 def set(db: str = typer.Argument(help='path to database'),
         key: str = typer.Argument(help='key to set'),
         value: str = typer.Argument(help='value to set'),
-        track_id: str = typer.Option(
+        track_id: Union[str , None] = typer.Option(
             None, help='If provided, only events with this track id value would be changed.'),
-        where_key: str = typer.Option(None, help='key to set'),
-        where_value: str = typer.Option(None, help='value to set')):
+        where_key: Union[str, None] = typer.Option(None, help='key to set'),
+        where_value: Union[str, None] = typer.Option(None, help='value to set'),
+        engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """
     Set a value in the database.
 
@@ -71,20 +81,23 @@ def set(db: str = typer.Argument(help='path to database'),
 
         >>> xt set "path/to/database.db" "name" "John Doe" --track-id "cool-name" --where-key "age" --where-value 30
     """
-    reader = Reader(db)
+    engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
+    reader = Reader(db, engine=engine_literal)
     if where_key is not None:
         reader.set_where(key, value, where_key, where_value, track_id)
     else:
-        Reader(db).set_value(key, value, track_id=track_id)
+        reader.set_value(key, value, track_id=track_id)
 
 
 @app.command()
 def ls(db: str = typer.Argument(help='path to database'),
-       column: str = typer.Argument(None, help='column values to list'),
+       column: Union[str, None] = typer.Argument(None, help='column values to list'),
        unique: bool = typer.Option(False, help='list unique values only'),
-       track_id: str = typer.Option(None, help='track ID to list')):
+       track_id: str = typer.Option(None, help='track ID to list'),
+       engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """List all the track IDs in the database"""
-    df = Reader(db).to_df(track_id=track_id)
+    engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
+    df = Reader(db, engine=engine_literal).to_df(track_id=track_id)
     if column is None:
         typer.echo(df.columns.tolist())
         return
@@ -97,10 +110,12 @@ def ls(db: str = typer.Argument(help='path to database'),
 
 @app.command()
 def sql(db: str = typer.Argument(help='path to database'),
-        query: str = typer.Argument(help='SQL query to execute')):
+        query: str = typer.Argument(help='SQL query to execute'),
+        engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """Execute a SQL query on the database and show the results as a markdown table - consider that the events table is 'db.events'\n\nExample: xt sql path/to/database.db 'SELECT * FROM db.events LIMIT 5' """
-    reader = Reader(db)
-    df = reader.conn.execute(query).df()
+    engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
+    reader = Reader(db, engine=engine_literal)
+    df: DataFrame = reader.engine.execute_sql(query)
     typer.echo(df.to_markdown())
 
 
@@ -111,9 +126,11 @@ app.add_typer(assets_app, name="assets")
 @assets_app.command()
 def export(db: str = typer.Argument(help='path to database'),
            key: str = typer.Argument(help='hash of model to retrive'),
-           output: str = typer.Argument(help='output to save the file to')):
+           output: str = typer.Argument(help='output to save the file to'),
+           engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """Export an asset from the database to a file."""
-    tracker = Reader(db)
+    engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
+    tracker = Reader(db, engine=engine_literal)
     asset = tracker.assets.assets.get(key)
     if asset is None:
         typer.echo(f'Asset {key} not found in database {db}')
@@ -129,19 +146,23 @@ def delete(db: str = typer.Argument(help='path to database'),
            column: str = typer.Option(
     None, help='Column to set to None'),
     remove_keys: bool = typer.Option(
-    True, help='Remove the keys associated with the asset')
+    True, help='Remove the keys associated with the asset'),
+    engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')
 ):
     """Delete a specific run from the database"""
-    Reader(db).remove_asset(asset, column, remove_keys)
+    engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
+    Reader(db, engine=engine_literal).remove_asset(asset, column, remove_keys)
 
 
 @assets_app.command()
-def ls(db: str = typer.Argument(help='path to database')):
+def ls(db: str = typer.Argument(help='path to database'),
+       engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """list all the assets in the database"""
+    engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
     typer.echo(f"Assets in {db}:\n")
     typer.echo("Key: Hash")
     typer.echo("----")
-    for key, hash in Reader(db).assets.keys.items():
+    for key, hash in Reader(db, engine=engine_literal).assets.keys.items():
         typer.echo(f"{key}: {hash}")
 
 
@@ -185,35 +206,39 @@ stats_app = typer.Typer(
 app.add_typer(stats_app, name="stats")
 
 
-def _get_df(db: str, columns: str = ''):
-    df = Reader(db).to_df()
+def _get_df(db: str, columns: str = '', engine: str = "sqlite"):
+    engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
+    df = Reader(db, engine=engine_literal).to_df()
     if columns != '':
-        columns = columns.split(',')
-        df = df[columns]
+        columns_list = columns.split(',')
+        df = df[columns_list]
     return df
 
 
 @stats_app.command()
 def describe(db: str = typer.Argument(help='path to database'),
-             columns: str = typer.Option('', help='columns to describe - comma separated list (e.g. "col1,col2,col3")')):
+             columns: str = typer.Option('', help='columns to describe - comma separated list (e.g. "col1,col2,col3")'),
+             engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """Describe columns in the database - use either numeric or categorical columns."""
-    df = _get_df(db, columns)
+    df = _get_df(db, columns, engine)
     typer.echo(df.describe().to_markdown())
 
 
 @stats_app.command()
 def top(db: str = typer.Argument(help='path to database'),
-        column: str = typer.Argument(help='Entry with best value')):
+        column: str = typer.Argument(help='Entry with best value'),
+        engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """Get the maximum value in the column"""
-    df = _get_df(db)
+    df = _get_df(db, engine=engine)
     df = df[df[column] == df[column].max()]
-    typer.echo(df.to_markdown())
+    typer.echo(str(df.to_markdown()))
 
 
 @stats_app.command()
 def bottom(db: str = typer.Argument(help='path to database'),
-           column: str = typer.Argument(help='Entry with best value')):
+           column: str = typer.Argument(help='Entry with best value'),
+           engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """Get the maximum value in the column"""
-    df = _get_df(db)
+    df = _get_df(db, engine=engine)
     df = df[df[column] == df[column].min()]
-    typer.echo(df.to_markdown())
+    typer.echo(str(df.to_markdown()))

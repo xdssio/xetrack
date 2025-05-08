@@ -24,6 +24,8 @@ Each instance of the tracker has a "track_id" which is a unique identifier for a
 
 ```bash
 pip install xetrack
+pip install xetrack[duckdb] # to use duckdb as engine
+pip install xetrack[assets] # to be able to use the assets manager to save objects
 ```
 
 ## Quickstart
@@ -103,6 +105,8 @@ tracker.latest
 
 ## Track assets (Oriented for ML models)
 
+Requirements: `pip install xetrack[assets]` (installs sqlitedict)
+
 When you attempt to track a non primitive value which is not a list or a dict - xetrack saves it as assets with deduplication and log the object hash:
 
 * Tips: If you plan to log the same object many times over, after the first time you log it, just insert the hash instead for future values to save time on encoding and hashing.
@@ -155,6 +159,12 @@ tracker.to_df() # get pandas dataframe of current run
 ### SQL-like
 You can filter the data using SQL-like syntax using [duckdb](https://duckdb.org/docs):
 * The sqlite database is attached as **db** and the table is **events**. Assts are in the **assets** table.   
+* To use the duckdb as backend, `pip install xetrack[duckdb]` (installs duckdb) and add the parameter engine="duckdb" tpo Tracker like so:
+
+```python
+Tracker(..., engine='duckdb')
+```
+
 
 
 #### Python
@@ -311,4 +321,10 @@ $ xt plot hist database.db x
 -----------------------------------
 $ xt plot scatter database.db x y
 
+```
+
+# Tests for development
+```bash
+pip install pytest-testmon pytest
+pytest -x -q -p no:warnings --testmon  tests
 ```
