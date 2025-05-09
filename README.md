@@ -141,7 +141,7 @@ with open("model.cloudpickle", 'rb') as f:
 
 ### Tips and tricks
 
-* ```Tracker(Tracker.IN_MEMORY) ``` Let you run only in memory - great for debuging or working with logs only
+* ```Tracker(Tracker.IN_MEMORY, logs_path='logs/') ``` Let you run only in memory - great for debuging or working with logs only
 
 ### Pandas-like
 
