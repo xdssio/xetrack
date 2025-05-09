@@ -1,7 +1,7 @@
 import logging
 import os
 from typing import Any, Optional, List, Dict
-from xetrack.connection import Connection
+from xetrack.engine import Engine
 from xetrack.config import SCHEMA_PARAMS, CONSTANTS, TRACKER_CONSTANTS
 import duckdb
 import pandas as pd
@@ -10,7 +10,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-class DuckDBConnection(Connection[duckdb.DuckDBPyConnection]):
+class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
     def _init_connection(self) -> duckdb.DuckDBPyConnection:
         """
         Initialize a DuckDB connection and attach the SQLite database.
@@ -36,7 +36,7 @@ class DuckDBConnection(Connection[duckdb.DuckDBPyConnection]):
         # Attach the SQLite database if not already attached
         if not is_attached:
             # Create directory for database file if needed
-            if self.db != ":memory:":
+            if self.db != CONSTANTS.IN_MEMORY_DB:
                 db_dir = os.path.dirname(self.db)
                 if db_dir and not os.path.exists(db_dir):
                     os.makedirs(db_dir, exist_ok=True)
@@ -286,3 +286,8 @@ class DuckDBConnection(Connection[duckdb.DuckDBPyConnection]):
         result = self.execute(query, params)
         # DuckDB has native support for converting results to a DataFrame
         return result.df()
+
+    def close(self) -> None:
+        if self.conn:
+            self.conn.close()
+            logger.debug("DuckDB connection closed.")

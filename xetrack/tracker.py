@@ -13,12 +13,11 @@ from coolname import generate_slug
 import random
 
 from xetrack.stats import Stats
-from xetrack.connection import Connection, SqliteConnection
+from xetrack.engine import Engine, SqliteEngine
 from xetrack.config import CONSTANTS, SCHEMA_PARAMS, TRACKER_CONSTANTS, LOGURU_PARAMS
 from xetrack.logging import Logger
 from xetrack.git import get_commit_hash
 
-# Define the connection type variable
 ConnT = TypeVar('ConnT')
 
 with contextlib.suppress(RuntimeError):
@@ -34,8 +33,8 @@ class Tracker:
     You can set params which are always attached to every event, and then track any parameters you want.
     """
 
-    IN_MEMORY: str = ":memory:"
-    SKIP_INSERT: str = "SKIP_INSERT"
+    IN_MEMORY: str = CONSTANTS.IN_MEMORY_DB
+    SKIP_INSERT: str = CONSTANTS.SKIP_INSERT
 
     def __init__(
         self,
@@ -101,7 +100,7 @@ class Tracker:
                 TRACKER_CONSTANTS.GIT_COMMIT_KEY, get_commit_hash(git_root=git_root)
             )
 
-    def _get_engine(self, db:str, engine: Literal["duckdb", "sqlite"], compress: bool=False) -> Connection[Any]:
+    def _get_engine(self, db:str, engine: Literal["duckdb", "sqlite"], compress: bool=False) -> Engine[Any]:
         """
         Create and return the appropriate database connection implementation.
         
@@ -118,12 +117,12 @@ class Tracker:
         """
         if engine == "duckdb":
             try:
-                from xetrack.duckdb import DuckDBConnection
-                return DuckDBConnection(db=db, compress=compress)
+                from xetrack.duckdb import DuckDBEngine
+                return DuckDBEngine(db=db, compress=compress)
             except ImportError:
                 raise ImportError("DuckDB is not installed. Please install it with 'pip install duckdb'")
                 
-        return SqliteConnection(db=db, compress=compress)
+        return SqliteEngine(db=db, compress=compress)
     
     @property
     def conn(self):
@@ -149,7 +148,6 @@ class Tracker:
     def columns(self):
         return self.engine.columns
 
-    # Delegate database-specific methods to the implementation
     def to_sql_type(self, value: Any) -> str:
         return self.engine.to_sql_type(value)
         

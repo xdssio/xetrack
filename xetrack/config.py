@@ -13,6 +13,9 @@ class DEFAULTS:
 
 class CONSTANTS:
 
+    IN_MEMORY_DB: str = ":memory:"
+    SKIP_INSERT: str = "SKIP_INSERT"
+
     DTYPES_TO_PYTHON = {
         "BOOLEAN": bool,
         "TINYINT": int,

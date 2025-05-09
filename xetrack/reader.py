@@ -1,7 +1,7 @@
 import pandas as pd
 from typing import Any, Optional, Literal
 
-from xetrack.connection import DuckDBConnection, SqliteConnection
+from xetrack.engine import DuckDBEngine, SqliteEngine
 from xetrack.config import SCHEMA_PARAMS
 from xetrack.logging import Logger
 
@@ -17,9 +17,9 @@ class Reader:
         """
         self.db = db
         if engine == "sqlite":
-            self.engine = SqliteConnection(db=db)
+            self.engine = SqliteEngine(db=db)
         else:
-            self.engine = DuckDBConnection(db=db)
+            self.engine = DuckDBEngine(db=db)
     
     @property
     def conn(self):
@@ -99,7 +99,7 @@ class Reader:
         Delete a run by track_id
         """
         # For SQLite, we need to handle table name differently
-        if isinstance(self.engine, SqliteConnection):
+        if isinstance(self.engine, SqliteEngine):
             table_name = SCHEMA_PARAMS.SQLITE_TABLE  # Use the base table name for SQLite
         else:
             table_name = SCHEMA_PARAMS.DUCKDB_TABLE
@@ -126,7 +126,7 @@ class Reader:
         # For SQLite connections, we need to handle string values differently
         # SQLite might store numeric values as strings, so we need to ensure the 
         # where_value comparison handles this correctly
-        if isinstance(self.engine, SqliteConnection):
+        if isinstance(self.engine, SqliteEngine):
             # Get all records that match the criteria
             df = self.to_df()
             
