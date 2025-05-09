@@ -24,6 +24,8 @@ Each instance of the tracker has a "track_id" which is a unique identifier for a
 
 ```bash
 pip install xetrack
+pip install xetrack[duckdb] # to use duckdb as engine
+pip install xetrack[assets] # to be able to use the assets manager to save objects
 ```
 
 ## Quickstart
@@ -103,6 +105,8 @@ tracker.latest
 
 ## Track assets (Oriented for ML models)
 
+Requirements: `pip install xetrack[assets]` (installs sqlitedict)
+
 When you attempt to track a non primitive value which is not a list or a dict - xetrack saves it as assets with deduplication and log the object hash:
 
 * Tips: If you plan to log the same object many times over, after the first time you log it, just insert the hash instead for future values to save time on encoding and hashing.
@@ -137,7 +141,7 @@ with open("model.cloudpickle", 'rb') as f:
 
 ### Tips and tricks
 
-* ```Tracker(Tracker.IN_MEMORY) ``` Let you run only in memory - great for debuging or working with logs only
+* ```Tracker(Tracker.IN_MEMORY, logs_path='logs/') ``` Let you run only in memory - great for debuging or working with logs only
 
 ### Pandas-like
 
@@ -155,6 +159,12 @@ tracker.to_df() # get pandas dataframe of current run
 ### SQL-like
 You can filter the data using SQL-like syntax using [duckdb](https://duckdb.org/docs):
 * The sqlite database is attached as **db** and the table is **events**. Assts are in the **assets** table.   
+* To use the duckdb as backend, `pip install xetrack[duckdb]` (installs duckdb) and add the parameter engine="duckdb" tpo Tracker like so:
+
+```python
+Tracker(..., engine='duckdb')
+```
+
 
 
 #### Python
@@ -276,7 +286,9 @@ $ xt assets export database.db hash output
 $ xt assets delete database.db hash 
 
 # If you have two databases, and you want to merge one to the other
+# Only works with duckdb at this moment 
 $ xt copy source.db target.db --assets/--no-assets
+
 
 # Stats
 $ xt describe database.db --columns=x,y,z
@@ -311,4 +323,25 @@ $ xt plot hist database.db x
 -----------------------------------
 $ xt plot scatter database.db x y
 
+```
+# SQLite vs Duckdb
+1. Dynamic Typing & Column Affinity
+    * Quirk: SQLite columns have affinity (preference) rather than strict types.
+    * Impact: "42" (str) will happily go into an INTEGER column without complaint.
+    * Mitigation: As you’ve done, use explicit Python casting based on expected dtype.
+
+2. Booleans Are Integers
+    * Quirk: SQLite doesn’t have a native BOOLEAN type. True becomes 1, False becomes 0.
+    * Impact: Any boolean stored/retrieved will behave like an integer.
+    * Mitigation: Handle boolean ↔ integer conversion in code if you care about type fidelity.
+
+3. NULLs Can Be Inserted into ANY Column
+    * Quirk: Unless a column is explicitly declared NOT NULL, SQLite allows NULL in any field — even primary keys.
+    * Impact: Can result in partially complete or duplicate-prone rows if you’re not strict.
+    * Mitigation: Add NOT NULL constraints and enforce required fields at the application level.
+
+# Tests for development
+```bash
+pip install pytest-testmon pytest
+pytest -x -q -p no:warnings --testmon  tests
 ```

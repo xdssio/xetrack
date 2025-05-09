@@ -1,4 +1,3 @@
-import typing
 import time
 import multiprocessing
 import multiprocessing.managers

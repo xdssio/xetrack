@@ -18,7 +18,7 @@ def test_reader_to_df():
     for i in range(5):
         tracker.log({"i": i})
 
-    reader = Reader(database)
+    reader = Reader(database, engine="duckdb")
     assert len(reader.to_df(track_id=tracker2.track_id)) == 0
 
     head = reader.to_df(head=2)['i']
@@ -31,7 +31,7 @@ def test_reader_to_df():
 
 
 def read_db(database: str):
-    reader = Reader(database, engine="sqlite")
+    reader = Reader(database, engine="duckdb")
     assert len(reader.to_df()) == 2
     assert len(reader.latest()) == 1
 
@@ -50,10 +50,10 @@ def test_reader():
 
 def test_reader_set_value():
     database = NamedTemporaryFile().name
-    Tracker(db=database, params={"model": 'lightgbm'}).log({"accuracy": 0.9})
-    Tracker(db=database, params={"model": 'lightgbm'}).log({"accuracy": 0.9})
+    Tracker(db=database,engine='duckdb', params={"model": 'lightgbm'}).log({"accuracy": 0.9})
+    Tracker(db=database,engine='duckdb', params={"model": 'lightgbm'}).log({"accuracy": 0.9})
 
-    editor = Reader(database, engine="sqlite")
+    editor = Reader(database, engine="duckdb")
     latest = editor.latest().to_dict('records')[0]
     assert latest['accuracy'] == 0.9
 
@@ -68,10 +68,10 @@ def test_reader_set_value():
 
 def test_reader_set_where():
     database = NamedTemporaryFile().name
-    Tracker(db=database, params={"model": 'lightgbm'}).log({"accuracy": 0.9})
-    Tracker(db=database, params={"model": 'xgboost'}).log({"accuracy": 0.9})
+    Tracker(db=database,engine='duckdb', params={"model": 'lightgbm'}).log({"accuracy": 0.9})
+    Tracker(db=database,engine='duckdb', params={"model": 'xgboost'}).log({"accuracy": 0.9})
 
-    editor = Reader(database, engine="sqlite")
+    editor = Reader(database, engine="duckdb")
     df = editor.to_df()
     originals = df.to_dict('records')
 
@@ -84,7 +84,7 @@ def test_reader_set_where():
     Tracker(db=database, params={"model": 'lightgbm'},
             reset=True).log({"accuracy": 0.9})
     Tracker(db=database, params={"model": 'xgboost'}).log({"accuracy": 0.9})
-    editor = Reader(database, engine="sqlite")
+    editor = Reader(database, engine="duckdb")
     editor.set_where('accuracy', 0.8, 'model', 'xgboost')
     
     # Check that one record has model='lightgbm' and accuracy=0.9, and one has model='xgboost' and accuracy=0.8
@@ -98,7 +98,7 @@ def test_reader_delete_run():
     database = NamedTemporaryFile().name
     Tracker(db=database, params={"model": 'lightgbm'}).log({"accuracy": 0.9})
     Tracker(db=database, params={"model": 'xgboost'}).log({"accuracy": 0.9})
-    editor = Reader(database, engine="sqlite")
+    editor = Reader(database, engine="duckdb")
     latest = editor.latest().to_dict('records')[0]
     assert len(editor) == 2
     editor.delete_run(latest['track_id'])

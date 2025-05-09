@@ -1,13 +1,18 @@
 import contextlib
-import importlib.metadata
-
-import duckdb
 from loguru import logger
+from xetrack.config import SCHEMA_PARAMS, TRACKER_CONSTANTS
 from xetrack.tracker import Tracker
 from xetrack.reader import Reader
-from xetrack.config import SCHEMA_PARAMS, TRACKER_CONSTANTS
 
-__version__ = importlib.metadata.version("xetrack")
+__version__ = "0.0.0"
+
+try:
+    from importlib.metadata import version
+    __version__ = version("xetrack")
+except ImportError:
+    pass
+
+__all__ = ['Reader', 'Tracker', 'copy']
 
 
 def copy(source: str, target: str, assets: bool = True):
@@ -15,28 +20,52 @@ def copy(source: str, target: str, assets: bool = True):
     Copies the data from one tracker to another
     :param source: The source database file
     :param target: The target database file
+    :param assets: Whether to copy assets or not
     """
 
+    import duckdb
     # if handle_duplicate not in ('IGNORE', 'REPLACE'):
     #     raise ValueError(f"Invalid handle_duplicate: {handle_duplicate} - Must be either IGNORE or REPLACE")
-    source_tracker: Tracker = Tracker(db=source)
-    target_tracker: Tracker = Tracker(db=target)
+    source_tracker: Tracker = Tracker(db=source, engine='duckdb')
+    target_tracker: Tracker = Tracker(db=target, engine='duckdb')
     ids = target_tracker.conn.execute(  # type: ignore
         "SELECT timestamp, track_id track_id FROM db.events"
     ).fetchall()  # type: ignore
     ids = {f"{id[0]}-{id[1]}" for id in ids}
     results = source_tracker.conn.execute(
-        f"SELECT * FROM {SCHEMA_PARAMS.TABLE}"
+        f"SELECT * FROM {SCHEMA_PARAMS.DUCKDB_TABLE}" # type: ignore
     ).fetchall()
     if len(results) == 0:
         print("No data to copy")
         return
+        
+    # Preserve column data types by getting schema information from source
+    source_schema = source_tracker.conn.execute(
+        f"DESCRIBE {SCHEMA_PARAMS.DUCKDB_TABLE}"
+    ).fetchall()
+    source_column_types = {col[0]: col[1] for col in source_schema}
+    
+    # Add new columns to target with appropriate types
     new_column_count = 0
     for column, hash_value in source_tracker.dtypes.items():
         if column not in target_tracker._columns:
             new_column_count += 1
-            target_tracker.add_column(column, hash_value)
-    keys = [column[0] for column in source_tracker._duckdb_types]
+            # Use the original data type from source if available
+            column_type = source_column_types.get(column)
+            # Add column with proper data type
+            if column_type:
+                # Use ADD COLUMN with type instead of the generic add_column
+                try:
+                    target_tracker.conn.execute(
+                        f"ALTER TABLE {SCHEMA_PARAMS.DUCKDB_TABLE} ADD COLUMN {column} {column_type}"
+                    )
+                except:
+                    # Fallback to generic add_column if the direct approach fails
+                    target_tracker.add_column(column, hash_value)
+            else:
+                target_tracker.add_column(column, hash_value)
+            
+    keys = [column[0] for column in source_tracker.engine._duckdb_types]
     size = len(keys)
     timestamp_ix, track_ix = keys.index(TRACKER_CONSTANTS.TIMESTAMP), keys.index(
         SCHEMA_PARAMS.TRACK_ID
@@ -70,7 +99,7 @@ def copy(source: str, target: str, assets: bool = True):
         values = list(event)
         with contextlib.suppress(duckdb.ConstraintException):
             target_tracker.conn.execute(
-                f"INSERT INTO {SCHEMA_PARAMS.TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
+                f"INSERT INTO {SCHEMA_PARAMS.DUCKDB_TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
                 values,
             )
     target_tracker.conn.execute("COMMIT TRANSACTION")
