@@ -286,7 +286,7 @@ $ xt assets export database.db hash output
 $ xt assets delete database.db hash 
 
 # If you have two databases, and you want to merge one to the other
-# Only works with duckdb atm
+# Only works with duckdb at this moment 
 $ xt copy source.db target.db --assets/--no-assets
 
 
