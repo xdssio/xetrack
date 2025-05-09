@@ -2,6 +2,8 @@ import pandas as pd
 from xetrack import Tracker, Reader
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
+from xetrack.engine import SqliteEngine
+
 
 def test_track_wrapper():
     tracker = Tracker(db=Tracker.IN_MEMORY, engine="sqlite", params={
@@ -115,3 +117,9 @@ def test_git_info():
     assert len(latest.get('git_commit_hash')) == 40
 
     tracker = Tracker(db=Tracker.IN_MEMORY, engine="sqlite", logs_stdout=True, git_root='..')
+
+
+def test_tracker_context_manager():
+    with SqliteEngine(Tracker.IN_MEMORY) as engine:
+        df = engine.execute_sql("SELECT * FROM main.events")
+    assert len(df) == 0

@@ -2,8 +2,10 @@ import pandas as pd
 from xetrack import Tracker, Reader
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
+from xetrack.duckdb import DuckDBEngine
 
-def test_track_wrapper():
+
+def test_duckdb_track_wrapper():
     tracker = Tracker(db=Tracker.IN_MEMORY, engine="duckdb", params={
                       "model": 'lightgbm'}, reset=True)
 
@@ -15,7 +17,7 @@ def test_track_wrapper():
     assert tracker.latest.get('name') == 'foo'
 
 
-def test_track():
+def test_duckdb_track():
     database = NamedTemporaryFile().name
 
     tracker = Tracker(db=database, engine="duckdb", params={"model": 'lightgbm'})
@@ -54,7 +56,7 @@ def test_track():
     assert len(new_tracker.to_df(all=True)) == 22
 
 
-def test_track_batch():
+def test_duckdb_track_batch():
     database = NamedTemporaryFile().name
     tracker = Tracker(db=database, engine="duckdb", params={"model": 'lightgbm'})
     n = 10
@@ -64,7 +66,7 @@ def test_track_batch():
     assert len(Reader(database).to_df()) == n
 
 
-def test_skip_insert():
+def test_duckdb_skip_insert():
     logs = TemporaryDirectory().name
     tracker = Tracker(db=Tracker.SKIP_INSERT, engine="duckdb", logs_path=logs)
     tracker.log({"a": 1, "b": 2})
@@ -72,7 +74,7 @@ def test_skip_insert():
     assert len(Reader.read_logs(logs)) == 1
 
 
-def test_track_assets():
+def test_duckdb_track_assets():
 
     class MLModel():
         def __init__(self, name):
@@ -96,7 +98,7 @@ def test_track_assets():
     assert pd.isna(tracker.to_df()['model'].iloc[0])
 
 
-def test_ignore_warnings():
+def test_duckdb_ignore_warnings():
 
     tracker = Tracker(db=Tracker.IN_MEMORY, engine="duckdb", logs_stdout=True)
     assert tracker.warnings
@@ -108,10 +110,15 @@ def test_ignore_warnings():
     assert not tracker.warnings
 
 
-def test_git_info():
+def test_duckdb_git_info():
     tracker = Tracker(db=Tracker.IN_MEMORY, engine="duckdb", logs_stdout=True, git_root='.')
     latest = tracker.log({'a': 1})
     assert latest.get('git_commit_hash')
     assert len(latest.get('git_commit_hash')) == 40
 
     tracker = Tracker(db=Tracker.IN_MEMORY, engine="duckdb", logs_stdout=True, git_root='..')
+
+def test_duckdb_tracker_context_manager():
+    with DuckDBEngine(Tracker.IN_MEMORY) as conn:
+        df = conn.execute_sql("SELECT * FROM main.events")
+    assert len(df) == 0
