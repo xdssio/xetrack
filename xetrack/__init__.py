@@ -1,66 +1,110 @@
 import contextlib
-from typing import Literal
-
 from loguru import logger
 from xetrack.config import SCHEMA_PARAMS, TRACKER_CONSTANTS
-from xetrack.reader import Reader
 from xetrack.tracker import Tracker
+from xetrack.reader import Reader
 
 __version__ = "0.0.0"
 
-with contextlib.suppress(ImportError):
+try:
     from importlib.metadata import version
     __version__ = version("xetrack")
+except ImportError:
+    pass
+
+__all__ = ['Reader', 'Tracker', 'copy']
 
 
 def copy(source: str, target: str, assets: bool = True):
-    import sqlite3
-    from xetrack.tracker import Tracker
-        
-    source_tracker = Tracker(db=source)
-    target_tracker = Tracker(db=target)
-        
-    for column, dtype in source_tracker.dtypes.items():
-        if column not in target_tracker.columns:
-            target_tracker.add_column(column, dtype)
+    """
+    Copies the data from one tracker to another
+    :param source: The source database file
+    :param target: The target database file
+    :param assets: Whether to copy assets or not
+    """
 
-    src_conn = sqlite3.connect(source)
-    dest_conn = sqlite3.connect(target)
-    
-    pre_count = dest_conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
-    
-    src_conn.execute(f"ATTACH DATABASE '{target}' AS dest")
-    
-    if assets:
-        src_conn.execute('''
-        INSERT OR IGNORE INTO dest.assets
-        SELECT * FROM assets
-        ''')  
-        src_conn.execute('''
-        INSERT OR IGNORE INTO dest.keys
-        SELECT * FROM keys
-        ''')  
+    import duckdb
+    # if handle_duplicate not in ('IGNORE', 'REPLACE'):
+    #     raise ValueError(f"Invalid handle_duplicate: {handle_duplicate} - Must be either IGNORE or REPLACE")
+    source_tracker: Tracker = Tracker(db=source, engine='duckdb')
+    target_tracker: Tracker = Tracker(db=target, engine='duckdb')
+    ids = target_tracker.conn.execute(  # type: ignore
+        "SELECT timestamp, track_id track_id FROM db.events"
+    ).fetchall()  # type: ignore
+    ids = {f"{id[0]}-{id[1]}" for id in ids}
+    results = source_tracker.conn.execute(
+        f"SELECT * FROM {SCHEMA_PARAMS.DUCKDB_TABLE}" # type: ignore
+    ).fetchall()
+    if len(results) == 0:
+        print("No data to copy")
+        return
         
-        src_conn.execute('''
-        INSERT OR IGNORE INTO dest.counts
-        SELECT * FROM counts
-        ''')
+    # Preserve column data types by getting schema information from source
+    source_schema = source_tracker.conn.execute(
+        f"DESCRIBE {SCHEMA_PARAMS.DUCKDB_TABLE}"
+    ).fetchall()
+    source_column_types = {col[0]: col[1] for col in source_schema}
+    
+    # Add new columns to target with appropriate types
+    new_column_count = 0
+    for column, hash_value in source_tracker.dtypes.items():
+        if column not in target_tracker._columns:
+            new_column_count += 1
+            # Use the original data type from source if available
+            column_type = source_column_types.get(column)
+            # Add column with proper data type
+            if column_type:
+                # Use ADD COLUMN with type instead of the generic add_column
+                try:
+                    target_tracker.conn.execute(
+                        f"ALTER TABLE {SCHEMA_PARAMS.DUCKDB_TABLE} ADD COLUMN {column} {column_type}"
+                    )
+                except:
+                    # Fallback to generic add_column if the direct approach fails
+                    target_tracker.add_column(column, hash_value)
+            else:
+                target_tracker.add_column(column, hash_value)
             
-    src_cols = [row[1] for row in src_conn.execute("PRAGMA table_info(events)").fetchall()]
-    dest_cols = [row[1] for row in dest_conn.execute("PRAGMA table_info(events)").fetchall()]
-    common_cols = [col for col in src_cols if col in dest_cols]
-        
-    cols_str = ", ".join(common_cols)
-    src_conn.execute(f'''
-    INSERT OR IGNORE INTO dest.events ({cols_str})
-    SELECT {cols_str} FROM events
-    ''')
-    
-    src_conn.commit()    
-    src_conn.execute("DETACH DATABASE dest")
-    src_conn.close()
-        
-    post_count = dest_conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
-    dest_conn.close()
-    
-    return post_count - pre_count
+    keys = [column[0] for column in source_tracker.engine._duckdb_types]
+    size = len(keys)
+    timestamp_ix, track_ix = keys.index(TRACKER_CONSTANTS.TIMESTAMP), keys.index(
+        SCHEMA_PARAMS.TRACK_ID
+    )
+    count = 0
+    if assets:
+        logger.info("Copying assets")
+        assets_count = 0
+        source_assets = source_tracker.assets
+        target_assets = target_tracker.assets
+        for key, hash_value in source_assets.keys.items():
+            target_assets.keys[key] = hash_value
+            if hash_value not in target_assets.assets:
+                target_assets.assets[hash_value] = source_assets.assets.get(hash_value)
+                if hash_value not in target_assets.counts:
+                    target_assets.counts[hash_value] = source_assets.counts.get(
+                        hash_value
+                    )
+                else:
+                    target_assets.counts[hash_value] += source_assets.counts.get(
+                        hash_value
+                    )
+                assets_count += 1
+        logger.info(f"Copied {assets_count} assets")
+    logger.info("Copying events")
+    target_tracker.conn.execute("BEGIN TRANSACTION")
+    for event in results:
+        if f"{event[timestamp_ix]}-{event[track_ix]}" in ids:
+            continue
+        count += 1
+        values = list(event)
+        with contextlib.suppress(duckdb.ConstraintException):
+            target_tracker.conn.execute(
+                f"INSERT INTO {SCHEMA_PARAMS.DUCKDB_TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
+                values,
+            )
+    target_tracker.conn.execute("COMMIT TRANSACTION")
+    total = target_tracker.count_all()
+    logger.info(
+        f"Copied {count} events and {new_column_count} new columns. New total is {total} events"
+    )
+    return count

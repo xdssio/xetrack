@@ -286,7 +286,9 @@ $ xt assets export database.db hash output
 $ xt assets delete database.db hash 
 
 # If you have two databases, and you want to merge one to the other
+# Only works with duckdb atm
 $ xt copy source.db target.db --assets/--no-assets
+
 
 # Stats
 $ xt describe database.db --columns=x,y,z
@@ -322,6 +324,21 @@ $ xt plot hist database.db x
 $ xt plot scatter database.db x y
 
 ```
+# SQLite vs Duckdb
+1. Dynamic Typing & Column Affinity
+    * Quirk: SQLite columns have affinity (preference) rather than strict types.
+    * Impact: "42" (str) will happily go into an INTEGER column without complaint.
+    * Mitigation: As you’ve done, use explicit Python casting based on expected dtype.
+
+2. Booleans Are Integers
+    * Quirk: SQLite doesn’t have a native BOOLEAN type. True becomes 1, False becomes 0.
+    * Impact: Any boolean stored/retrieved will behave like an integer.
+    * Mitigation: Handle boolean ↔ integer conversion in code if you care about type fidelity.
+
+3. NULLs Can Be Inserted into ANY Column
+    * Quirk: Unless a column is explicitly declared NOT NULL, SQLite allows NULL in any field — even primary keys.
+    * Impact: Can result in partially complete or duplicate-prone rows if you’re not strict.
+    * Mitigation: Add NOT NULL constraints and enforce required fields at the application level.
 
 # Tests for development
 ```bash

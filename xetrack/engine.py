@@ -369,21 +369,37 @@ class SqliteEngine(Engine[sqlite3.Connection]):
     def _insert_raw(self, data: List[tuple[list[str], list[Any], int]]) -> None:
         try:
             self.conn.execute("BEGIN TRANSACTION")
-            
+
             for keys, values, size in data:
-                sanitized_values = []
-                for value in values:
+                sanitized_values: list[Any] = []
+                for key, value in zip(keys, values):
+                    # Convert complex types to string
                     if isinstance(value, (dict, list, tuple)):
-                        sanitized_values.append(str(value))
+                        sanitized_values.append(str(value)) # type: ignore
+                    # Coerce str to int/float if needed based on schema
+                    elif isinstance(value, str):
+                        expected_type = self.dtypes.get(key)
+                        if expected_type == int:
+                            try:
+                                sanitized_values.append(int(value))
+                            except ValueError:
+                                sanitized_values.append(value)
+                        elif expected_type == float:
+                            try:
+                                sanitized_values.append(float(value))
+                            except ValueError:
+                                sanitized_values.append(value)
+                        else:
+                            sanitized_values.append(value)
                     else:
                         sanitized_values.append(value)
-                        
+
                 placeholders = ', '.join(['?' for _ in range(size)])
                 table_name = self._strip_db_prefix(SCHEMA_PARAMS.DUCKDB_TABLE)
                 query = f"INSERT INTO {table_name} ({', '.join(keys)}) VALUES ({placeholders})"
-                
+
                 self.conn.execute(query, sanitized_values)
-                
+
             self.conn.commit()
         except sqlite3.IntegrityError:
             self.conn.rollback()

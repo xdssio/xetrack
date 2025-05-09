@@ -6,7 +6,6 @@ from datetime import datetime as dt
 import logging
 import multiprocessing
 import time
-from _pytest.mark import param
 import psutil
 import re
 from coolname import generate_slug

@@ -122,3 +122,21 @@ def test_duckdb_tracker_context_manager():
     with DuckDBEngine(Tracker.IN_MEMORY) as conn:
         df = conn.execute_sql("SELECT * FROM main.events")
     assert len(df) == 0
+
+def test_duckdb_primitive_datatypes():
+    database = NamedTemporaryFile().name
+    
+    # Create tracker and log different primitive types
+    tracker = Tracker(db=database, engine="duckdb")
+    tracker.log({"int_val": 42, "float_val": 3.14, "bool_val": True, "str_val": "test_string"})
+    
+    # Read back using Reader
+    reader = Reader(database, engine="duckdb")
+    df = reader.to_df()
+    values = df.iloc[0].to_dict()
+    
+    assert values["int_val"] == 42
+    assert values["float_val"] == 3.14
+    assert values["bool_val"] == True
+    assert values["str_val"] == "test_string"
+    

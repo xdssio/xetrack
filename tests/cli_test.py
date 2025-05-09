@@ -7,10 +7,11 @@ import numpy as np
 import shutil
 import cloudpickle
 import pytest
+import pandas as pd
 runner = CliRunner()
 
 # Helper function for checking set values
-def _check_reader_values(reader, expected_values):
+def _check_reader_values(reader: Reader, expected_values: list) -> pd.DataFrame:
     df = reader.to_df()
     values = sorted(df['accuracy'].tolist())
     assert set(values) == set(expected_values)
@@ -58,34 +59,45 @@ def test_cli_copy():
     tempdir = TemporaryDirectory()
     db1 = f'{tempdir.name}/db1.db'
     db2 = f'{tempdir.name}/db2.db'
-    source = Tracker(db1)
-    source.log({'a': 1, 'b': 1})
-
-    shutil.copy(db1, db2)
-    target = Tracker(db2)
-
+    db3 = f'{tempdir.name}/db3.db'
+    
+    source = Tracker(db1)    
+    source.log({'a': 1, 'b': 1})    
+    # Test copy with default behavior (assets=True)
+    result = runner.invoke(app, args=['copy', db1, db2])
+    assert result.exit_code == 0
+        
+    reader2 = Reader(db2)
+    
+    assert 1 in set(reader2.to_df()['a'].tolist())
+        
+    result = runner.invoke(app, args=['copy', db1, db3, '--no-assets'])
+    assert result.exit_code == 0
+        
+    reader3 = Reader(db3)
+    assert 1 in set(reader3.to_df()['a'].tolist())
+    
     source.log({'a': 2, 'c': 2})
     source.log({'a': 3, 'c': 3})
+    
+    target = Tracker(db2)
     target.log({'a': 4, 'c': 4})
     
     result = runner.invoke(app, args=['copy', db2, db1])
     assert result.exit_code == 0
-
+    
     result = runner.invoke(app, args=['copy', db1, db2])
     assert result.exit_code == 0
-
+    
     # Verify that both databases contain the expected records by checking 'a' values
-    db1_values = set(Reader(db1).to_df()['a'].tolist())
-    db2_values = set(Reader(db2).to_df()['a'].tolist())
+    db1_values = set(Reader(db1).to_df()['a'].tolist()) # type: ignore
+    db2_values = set(Reader(db2).to_df()['a'].tolist()) # type: ignore
+        
+    for i in range(1, 5):
+        assert i in db1_values
+        assert i in db2_values
     
-    # Both databases should contain values 1, 2, 3, 4
-    assert 1 in db1_values
-    assert 2 in db1_values
-    assert 3 in db1_values
     
-    assert 1 in db2_values
-    assert 4 in db2_values
-
 
 def test_cli_delete():
     database = NamedTemporaryFile().name

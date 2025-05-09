@@ -52,3 +52,19 @@ def test_merge_repetitions():
     assert copy(source=db2, target=db1) == 1
     assert copy(source=db2, target=db1) == 0  # already copied
     assert copy(source=db1, target=db2) == 2
+
+
+def test_copy_datatypes():
+    tempdir = TemporaryDirectory()
+    db1 = tempdir.name + '/db1.db'
+    db2 = tempdir.name + '/db2.db'
+        
+    source = Tracker(db1)
+    source.log({"int_val": 42, "float_val": 3.14, "bool_val": True, "str_val": "test_string"})
+    copy(source=db1, target=db2)
+    target = Tracker(db2)
+    source_df = source.to_df()        
+    target_df = target.to_df(all=True)    
+    assert (target_df.dtypes == source_df.dtypes).all()        
+    assert len(target_df) > 0    
+    tempdir.cleanup()
