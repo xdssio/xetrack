@@ -58,3 +58,16 @@ def test_logs_to_file():
 
     tracker = Tracker(Tracker.IN_MEMORY, logs_path="logs", logs_stdout=True)
     _ = tracker.log({"a": 1, "b": 2})
+
+def test_multi_logggers():    
+    a = Tracker(Tracker.IN_MEMORY, logs_path="logs", logs_stdout=True)
+    b = Tracker(Tracker.IN_MEMORY, logs_path="logs", logs_stdout=False)
+    
+    a.log({"a": 1, "b": 2})
+    b.log({"a": 1, "b": 2})
+    
+    c = Tracker(Tracker.IN_MEMORY, logs_path="logs", logs_stdout=True)
+    c.log({"a": 1, "b": 2})
+    c.log({"a": 1, "b": 2})
+
+    

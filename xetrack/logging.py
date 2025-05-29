@@ -20,7 +20,8 @@ def validate_loguru():
 
 
 class Logger:
-    _initialized = False
+    _current_config = None  # Track the current global configuration
+    _logger_instance = None  # Shared logger instance
 
     def __init__(
         self,
@@ -33,59 +34,62 @@ class Logger:
         self.stdout = stdout
         self.file_format = file_format or LOGURU_PARAMS.LOG_FILE_FORMAT
         self.prettify = prettify
-        self.logger = validate_loguru()
-        self._init_logger()
+        
+        # Get or create the shared logger instance
+        if Logger._logger_instance is None:
+            Logger._logger_instance = validate_loguru()
+        self.logger = Logger._logger_instance
+        
+        # Configure the logger with this instance's settings
+        self._configure_logger()
 
-    def _init_logger(self):
-        if not Logger._initialized:
-            # First time initialization
-            self.logger.remove()  # Remove default handlers
-            self._add_levels()  # Add custom levels
-            Logger._initialized = True
-
-            # Add stdout handler only during first initialization if needed
+    def _configure_logger(self):
+        """Configure the global logger with this instance's settings"""
+        current_config = {
+            'stdout': self.stdout,
+            'logs_path': self.logs_path,
+            'file_format': self.file_format,
+            'prettify': self.prettify
+        }
+        
+        # Only reconfigure if this is different from the current configuration
+        if Logger._current_config != current_config:
+            # Remove all existing handlers
+            self.logger.remove()
+            
+            # Add custom levels (safe to call multiple times)
+            self._add_levels()
+            
+            # Add stdout handler if requested
             if self.stdout:
                 self.logger.add(
                     sys.stdout,
                     format=LOGURU_PARAMS.FORMAT,  # type: ignore
                     enqueue=False,
                 )
-        else:
-            # If we're re-initializing and stdout setting has changed, we need to update
-            # Check if stdout is enabled but we don't want it
-            if not self.stdout:
-                # Remove all stdout handlers
-                for handler_id, handler in self.logger._core.handlers.items():  # type: ignore
-                    if hasattr(handler, "sink") and handler.sink == sys.stdout:
-                        self.logger.remove(handler_id)  # type: ignore
-            # If stdout is requested but not present, add it
-            elif self.stdout and not any(
-                hasattr(handler, "sink") and handler.sink == sys.stdout  # type: ignore
-                for handler in self.logger._core.handlers.values()  # type: ignore
-            ):
+            
+            # Add file handler if logs_path is provided
+            if self.logs_path:
                 self.logger.add(
-                    sys.stdout,
+                    f"{self.logs_path}/{self.file_format}",
                     format=LOGURU_PARAMS.FORMAT,  # type: ignore
                     enqueue=False,
+                    serialize=not self.prettify,
                 )
-
-        # Always add file handler if logs_path is provided
-        if self.logs_path:
-            self.logger.add(
-                f"{self.logs_path}/{self.file_format}",
-                format=LOGURU_PARAMS.FORMAT,  # type: ignore
-                enqueue=False,
-                serialize=not self.prettify,
-            )
+            
+            # Update the current configuration
+            Logger._current_config = current_config.copy()
 
     def _add_levels(self):
-        # Remove all handlers instead of trying to remove a specific one
-        self.logger.remove()
-
-        # Add custom log levels
-        self.logger.level("MONITOR", no=26, color="<blue>")
-        self.logger.level("TRACKING", no=27, color="<blue>")
-        self.logger.level("EXPERIMENT", no=28, color="<blue>")
+        """Add custom log levels (safe to call multiple times)"""
+        # Add custom log levels - loguru handles duplicates gracefully
+        try:
+            self.logger.level("MONITOR", no=26, color="<blue>")
+            self.logger.level("TRACKING", no=27, color="<blue>")
+            self.logger.level("EXPERIMENT", no=28, color="<blue>")
+        except Exception:
+            # Levels might already exist, which is fine
+            pass
 
     def experiment(self, params: Dict[str, Any]):
         self.log(params, LOGURU_PARAMS.EXPERIMENT, indent=4)

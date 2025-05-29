@@ -34,7 +34,7 @@ class Tracker:
 
     IN_MEMORY: str = CONSTANTS.IN_MEMORY_DB
     SKIP_INSERT: str = CONSTANTS.SKIP_INSERT
-
+    
     def __init__(
         self,
         db: str = "track.db",
@@ -454,8 +454,8 @@ class Tracker:
             data.update(stats.get_average_stats())  # type: ignore
         if self.log_network_params:
             bytes_sent, bytes_recv = self._to_send_recv(
-                net_io_before, psutil.net_io_counters()
-            )  # type: ignore
+                net_io_before, psutil.net_io_counters() # type: ignore
+            )  
             data.update({"bytes_sent": bytes_sent, "bytes_recv": bytes_recv})
         self.log(data)
         if exception is not None and self.raise_on_error:
@@ -479,7 +479,7 @@ class Tracker:
             # This ensures proper handling of table names for each database engine
             self.engine.add_column(SCHEMA_PARAMS.DUCKDB_TABLE, key, dtype)
             self._columns.add(key)
-        elif self.warnings:
+        elif self.warnings and self.db != Tracker.IN_MEMORY:
             self.logger.warning(f"Column {key} already exists")
         return value
 
@@ -493,8 +493,7 @@ class Tracker:
         """
         if key not in self._columns:
             self.add_column(key, value)
-        
-        # Use conn_impl.set_value with our track_id
+                
         self.engine.set_value(key, value, track_id=self.track_id)
         
     def set_where(
