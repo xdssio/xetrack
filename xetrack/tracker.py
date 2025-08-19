@@ -52,7 +52,7 @@ class Tracker:
         warnings: bool = True,
         git_root: Optional[str] = None,
         engine: Literal["duckdb", "sqlite"] = "sqlite",
-        table_name: str = SCHEMA_PARAMS.EVENTS_TABLE,
+        table_name: str = SCHEMA_PARAMS.DEFAULT_TABLE,
     ):
         """
         Initializes the class instance.
@@ -101,7 +101,13 @@ class Tracker:
                 TRACKER_CONSTANTS.GIT_COMMIT_KEY, get_commit_hash(git_root=git_root)
             )
 
-    def _get_engine(self, db:str, engine: Literal["duckdb", "sqlite"], compress: bool=False, table_name: str = SCHEMA_PARAMS.EVENTS_TABLE) -> Engine[Any]:
+    def _get_engine(
+        self,
+        db: str,
+        engine: Literal["duckdb", "sqlite"],
+        compress: bool = False,
+        table_name: str = SCHEMA_PARAMS.DEFAULT_TABLE,
+    ) -> Engine[Any]:
         """
         Create and return the appropriate database connection implementation.
         

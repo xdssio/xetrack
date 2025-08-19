@@ -15,7 +15,12 @@ __all__ = ['Engine', 'SqliteEngine']
 
 
 class Engine(ABC, Generic[T]):
-    def __init__(self, db: str = DEFAULTS.DB, compress: bool = False, table_name: str = SCHEMA_PARAMS.EVENTS_TABLE):
+    def __init__(
+        self,
+        db: str = DEFAULTS.DB,
+        compress: bool = False,
+        table_name: str = SCHEMA_PARAMS.DEFAULT_TABLE,
+    ):
         """
         Abstract base class for database connections.
         """

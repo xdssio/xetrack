@@ -7,7 +7,12 @@ from xetrack.logging import Logger
 
 
 class Reader:
-    def __init__(self, db: str, engine: Literal["duckdb", "sqlite"] = "sqlite", table_name: str = SCHEMA_PARAMS.EVENTS_TABLE):
+    def __init__(
+        self,
+        db: str,
+        engine: Literal["duckdb", "sqlite"] = "sqlite",
+        table_name: str = SCHEMA_PARAMS.DEFAULT_TABLE,
+    ):
         """
         Initialize a Reader with the specified database file and engine.
         

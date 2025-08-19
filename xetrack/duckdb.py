@@ -11,7 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
-    def __init__(self, db: str = "track.db", compress: bool = False, table_name: str = SCHEMA_PARAMS.EVENTS_TABLE):
+    def __init__(
+        self,
+        db: str = "track.db",
+        compress: bool = False,
+        table_name: str = SCHEMA_PARAMS.DEFAULT_TABLE,
+    ):
         # For DuckDB, we need to ensure table names have the db. prefix
         if "." not in table_name:
             table_name = f"db.{table_name}"
