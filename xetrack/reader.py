@@ -7,19 +7,26 @@ from xetrack.logging import Logger
 
 
 class Reader:
-    def __init__(self, db: str, engine: Literal["duckdb", "sqlite"] = "sqlite"):
+    def __init__(
+        self,
+        db: str,
+        engine: Literal["duckdb", "sqlite"] = "sqlite",
+        table_name: str = SCHEMA_PARAMS.DEFAULT_TABLE,
+    ):
         """
         Initialize a Reader with the specified database file and engine.
         
         Args:
             db: The database file path
             engine: The database engine to use, either "duckdb" or "sqlite". Default is "sqlite".
+            table_name: Name of the table to read from. Default is "default". Allows reading different experiment types.
         """
         self.db = db
+        self.table_name = table_name
         if engine == "sqlite":
-            self.engine = SqliteEngine(db=db)
+            self.engine = SqliteEngine(db=db, table_name=table_name)
         else:
-            self.engine = DuckDBEngine(db=db)
+            self.engine = DuckDBEngine(db=db, table_name=table_name)
     
     @property
     def conn(self):
@@ -46,7 +53,7 @@ class Reader:
             head (Optional[int], optional): The number of rows to return from the head of the table. Defaults to None.
             tail (Optional[int], optional): The number of rows to return from the tail of the table. Defaults to None.        
         """
-        query = f"SELECT * FROM {SCHEMA_PARAMS.DUCKDB_TABLE}"
+        query = f"SELECT * FROM {self.engine.table_name}"
         if track_id is not None:
             query += f" WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
             cursor = self.engine.execute(query, [track_id])
@@ -73,14 +80,14 @@ class Reader:
         return results.sort_values(by=['timestamp'])
 
     def latest(self):
-        query = f"SELECT {SCHEMA_PARAMS.TRACK_ID} FROM {SCHEMA_PARAMS.DUCKDB_TABLE} ORDER BY {SCHEMA_PARAMS.TRACK_ID} DESC LIMIT 1"
+        query = f"SELECT {SCHEMA_PARAMS.TRACK_ID} FROM {self.engine.table_name} ORDER BY {SCHEMA_PARAMS.TRACK_ID} DESC LIMIT 1"
         result = self.engine.execute(query).fetchone()
         
         if result is None:
             return pd.DataFrame()  # Return empty DataFrame if no results
             
         latest_track_id = result[0]
-        query = f"SELECT * FROM {SCHEMA_PARAMS.DUCKDB_TABLE} WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
+        query = f"SELECT * FROM {self.engine.table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
         cursor = self.engine.execute(query, [latest_track_id])
         
         # Convert cursor results to a DataFrame
@@ -98,13 +105,7 @@ class Reader:
         """
         Delete a run by track_id
         """
-        # For SQLite, we need to handle table name differently
-        if isinstance(self.engine, SqliteEngine):
-            table_name = SCHEMA_PARAMS.SQLITE_TABLE  # Use the base table name for SQLite
-        else:
-            table_name = SCHEMA_PARAMS.DUCKDB_TABLE
-            
-        query = f"DELETE FROM {table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
+        query = f"DELETE FROM {self.engine.table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
         self.engine.execute(query, [track_id])
         return True
 

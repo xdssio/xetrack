@@ -11,10 +11,11 @@ app = typer.Typer()
 def head(db: str = typer.Argument(help='path to database'),
          n: int = typer.Option(5, help="Number of lines to show"),
          json: bool = typer.Option(False, help="Prettify the output as json"),
-         engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
-    """Show the first lines of the database evetns table"""
+         engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"'),
+         table_name: str = typer.Option("default", help="Name of the table to read from")):
+    """Show the first lines of the database events table"""
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
-    df = Reader(db, engine=engine_literal).to_df(head=n)
+    df = Reader(db, engine=engine_literal, table_name=table_name).to_df(head=n)
     result = dumps(df.to_dict(orient='records'),
                    indent=4) if json else df.to_markdown()
     typer.echo(result)
@@ -24,10 +25,11 @@ def head(db: str = typer.Argument(help='path to database'),
 def tail(db: str = typer.Argument(help='path to database'),
          n: int = typer.Option(5, help="Number of lines to show"),
          json: bool = typer.Option(False, help="Prettify the output as json"),
-         engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
-    """Show the last lines of the database evetns table"""
+         engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"'),
+         table_name: str = typer.Option("default", help="Name of the table to read from")):
+    """Show the last lines of the database events table"""
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
-    df = Reader(db, engine=engine_literal).to_df(tail=n)
+    df = Reader(db, engine=engine_literal, table_name=table_name).to_df(tail=n)
     result = dumps(df.to_dict(orient='records'),
                    indent=4) if json else df.to_markdown()
     typer.echo(result)
@@ -35,11 +37,12 @@ def tail(db: str = typer.Argument(help='path to database'),
 
 @app.command()
 def columns(db: str = typer.Argument(help='path to database'),
-            engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
+            engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"'),
+            table_name: str = typer.Option("default", help="Name of the table to read from")):
     """List the columns in the database"""
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
-    columns_list = list(Reader(db, engine=engine_literal).to_df(head=1).columns)
-    typer.echo(f"Columns in {db}:\n")
+    columns_list = list(Reader(db, engine=engine_literal, table_name=table_name).to_df(head=1).columns)
+    typer.echo(f"Columns in {db} table '{table_name}':\n")
     typer.echo(columns_list)
 
 
@@ -54,10 +57,11 @@ def copy(source: str = typer.Argument(help='path to source database - will not b
 @app.command()
 def delete(db: str = typer.Argument(help='path to database'),
            track_id: str = typer.Argument(help='track ID to delete'),
-           engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
+           engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"'),
+           table_name: str = typer.Option("default", help="Name of the table to read from")):
     """Delete a specific run from the database"""
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
-    Reader(db, engine=engine_literal).delete_run(track_id)
+    Reader(db, engine=engine_literal, table_name=table_name).delete_run(track_id)
 
 
 @app.command()
@@ -68,7 +72,8 @@ def set(db: str = typer.Argument(help='path to database'),
             None, help='If provided, only events with this track id value would be changed.'),
         where_key: Union[str, None] = typer.Option(None, help='key to set'),
         where_value: Union[str, None] = typer.Option(None, help='value to set'),
-        engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
+        engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"'),
+        table_name: str = typer.Option("default", help="Name of the table to read from")):
     """
     Set a value in the database.
 
@@ -82,7 +87,7 @@ def set(db: str = typer.Argument(help='path to database'),
         >>> xt set "path/to/database.db" "name" "John Doe" --track-id "cool-name" --where-key "age" --where-value 30
     """
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
-    reader = Reader(db, engine=engine_literal)
+    reader = Reader(db, engine=engine_literal, table_name=table_name)
     if where_key is not None:
         reader.set_where(key, value, where_key, where_value, track_id)
     else:
@@ -94,10 +99,11 @@ def ls(db: str = typer.Argument(help='path to database'),
        column: Union[str, None] = typer.Argument(None, help='column values to list'),
        unique: bool = typer.Option(False, help='list unique values only'),
        track_id: str = typer.Option(None, help='track ID to list'),
-       engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
+       engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"'),
+       table_name: str = typer.Option("default", help="Name of the table to read from")):
     """List all the track IDs in the database"""
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
-    df = Reader(db, engine=engine_literal).to_df(track_id=track_id)
+    df = Reader(db, engine=engine_literal, table_name=table_name).to_df(track_id=track_id)
     if column is None:
         typer.echo(df.columns.tolist())
         return
@@ -111,10 +117,11 @@ def ls(db: str = typer.Argument(help='path to database'),
 @app.command()
 def sql(db: str = typer.Argument(help='path to database'),
         query: str = typer.Argument(help='SQL query to execute'),
-        engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
-    """Execute a SQL query on the database and show the results as a markdown table - consider that the events table is 'db.events'\n\nExample: xt sql path/to/database.db 'SELECT * FROM db.events LIMIT 5' """
+        engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"'),
+        table_name: str = typer.Option("default", help="Name of the table to read from")):
+    """Execute a SQL query on the database and show the results as a markdown table - consider that the default table is 'db.default' or 'default'\n\nExample: xt sql path/to/database.db 'SELECT * FROM db.default LIMIT 5' """
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
-    reader = Reader(db, engine=engine_literal)
+    reader = Reader(db, engine=engine_literal, table_name=table_name)
     df: DataFrame = reader.engine.execute_sql(query)
     typer.echo(df.to_markdown())
 

@@ -29,19 +29,27 @@ def copy(source: str, target: str, assets: bool = True):
     source_tracker: Tracker = Tracker(db=source, engine='duckdb')
     target_tracker: Tracker = Tracker(db=target, engine='duckdb')
     ids = target_tracker.conn.execute(  # type: ignore
-        "SELECT timestamp, track_id track_id FROM db.events"
+        f"SELECT timestamp, track_id track_id FROM {target_tracker.engine.table_name}"
     ).fetchall()  # type: ignore
     ids = {f"{id[0]}-{id[1]}" for id in ids}
     results = source_tracker.conn.execute(
-        f"SELECT * FROM {SCHEMA_PARAMS.DUCKDB_TABLE}" # type: ignore
+        f"SELECT * FROM {source_tracker.engine.table_name}" # type: ignore
     ).fetchall()
     if len(results) == 0:
         print("No data to copy")
         return
         
-    # Preserve column data types by getting schema information from source
+    # Preserve column data types by getting schema information from source  
+    # For DuckDB, handle table names with db. prefix properly
+    table_for_describe = source_tracker.engine.table_name
+    if "." in table_for_describe:
+        # For DuckDB: db."default" -> db.default (remove quotes around entire thing)
+        parts = table_for_describe.split(".")
+        if len(parts) == 2:
+            table_for_describe = f'{parts[0]}."{parts[1]}"'
+    
     source_schema = source_tracker.conn.execute(
-        f"DESCRIBE {SCHEMA_PARAMS.DUCKDB_TABLE}"
+        f"DESCRIBE {table_for_describe}"
     ).fetchall()
     source_column_types = {col[0]: col[1] for col in source_schema}
     
@@ -57,7 +65,7 @@ def copy(source: str, target: str, assets: bool = True):
                 # Use ADD COLUMN with type instead of the generic add_column
                 try:
                     target_tracker.conn.execute(
-                        f"ALTER TABLE {SCHEMA_PARAMS.DUCKDB_TABLE} ADD COLUMN {column} {column_type}"
+                        f"ALTER TABLE {target_tracker.engine.table_name} ADD COLUMN {column} {column_type}"
                     )
                 except:
                     # Fallback to generic add_column if the direct approach fails
@@ -99,7 +107,7 @@ def copy(source: str, target: str, assets: bool = True):
         values = list(event)
         with contextlib.suppress(duckdb.ConstraintException):
             target_tracker.conn.execute(
-                f"INSERT INTO {SCHEMA_PARAMS.DUCKDB_TABLE} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
+                f"INSERT INTO {target_tracker.engine.table_name} ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in range(size)])})",
                 values,
             )
     target_tracker.conn.execute("COMMIT TRANSACTION")

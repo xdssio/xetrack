@@ -120,7 +120,7 @@ def test_duckdb_git_info():
 
 def test_duckdb_tracker_context_manager():
     with DuckDBEngine(Tracker.IN_MEMORY) as conn:
-        df = conn.execute_sql("SELECT * FROM main.events")
+        df = conn.execute_sql(f"SELECT * FROM {conn.table_name}")
     assert len(df) == 0
 
 def test_duckdb_primitive_datatypes():

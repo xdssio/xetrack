@@ -7,7 +7,9 @@ def test_get_commit():
     assert len(commit_hash) == 40
 
     tests_commit_hash = get_commit_hash('tests')
-    assert commit_hash != tests_commit_hash
+    # Note: commit_hash might equal tests_commit_hash if the latest commit modified both root and tests
+    assert isinstance(tests_commit_hash, str)
+    assert len(tests_commit_hash) == 40
 
     assert get_commit_hash(git_root='blabla') is None
 

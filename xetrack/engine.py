@@ -15,13 +15,18 @@ __all__ = ['Engine', 'SqliteEngine']
 
 
 class Engine(ABC, Generic[T]):
-    def __init__(self, db: str = DEFAULTS.DB, compress: bool = False):
+    def __init__(
+        self,
+        db: str = DEFAULTS.DB,
+        compress: bool = False,
+        table_name: str = SCHEMA_PARAMS.DEFAULT_TABLE,
+    ):
         """
         Abstract base class for database connections.
         """
         logger.debug(f"Connecting to {db}")
         self.db = db
-        self.table_name = SCHEMA_PARAMS.DUCKDB_TABLE
+        self.table_name = table_name
         self.conn: T = self._init_connection()
         self.assets = None
         try:
@@ -203,7 +208,7 @@ class Engine(ABC, Generic[T]):
             TRACKER_CONSTANTS.TIMESTAMP: "VARCHAR"
         }
         primary_key = [SCHEMA_PARAMS.TRACK_ID, TRACKER_CONSTANTS.TIMESTAMP]
-        self.create_table(SCHEMA_PARAMS.DUCKDB_TABLE, columns, primary_key)
+        self.create_table(self.table_name, columns, primary_key)
 
     @abstractmethod
     def close(self) -> None:
@@ -239,9 +244,17 @@ class SqliteEngine(Engine[sqlite3.Connection]):
         cursor = self.conn.cursor()
         try:
             fixed_query = query
-            if SCHEMA_PARAMS.DUCKDB_TABLE in query:
-                table_name = self._strip_db_prefix(SCHEMA_PARAMS.DUCKDB_TABLE)
-                fixed_query = query.replace(SCHEMA_PARAMS.DUCKDB_TABLE, table_name)
+            # Handle table names in queries - both DuckDB-style and quote reserved keywords
+            if self.table_name in query and f'"{self._strip_db_prefix(self.table_name)}"' not in query:
+                if "." in self.table_name:
+                    # Handle DuckDB-style table names by stripping db. prefix for SQLite
+                    sqlite_table_name = self._strip_db_prefix(self.table_name)
+                    quoted_table_name = self._quote_table_name(self.table_name)
+                    fixed_query = query.replace(self.table_name, quoted_table_name)
+                else:
+                    # Quote table name to handle reserved keywords like 'default'
+                    quoted_table_name = self._quote_table_name(self.table_name)
+                    fixed_query = query.replace(self.table_name, quoted_table_name)
             
             if params:
                 cursor.execute(fixed_query, params)
@@ -252,8 +265,9 @@ class SqliteEngine(Engine[sqlite3.Connection]):
         except sqlite3.OperationalError as e:
             logger.debug(f"SQLite error: {str(e)}, query: {query}")
             
-            if "no such table" in str(e) and SCHEMA_PARAMS.DUCKDB_TABLE in query:
-                fixed_query = query.replace(f"{SCHEMA_PARAMS.DUCKDB_TABLE}", self._strip_db_prefix(SCHEMA_PARAMS.DUCKDB_TABLE))
+            # Fallback: try stripping db. prefix if table not found
+            if "no such table" in str(e) and "." in self.table_name and self.table_name in query:
+                fixed_query = query.replace(self.table_name, self._strip_db_prefix(self.table_name))
                 if fixed_query != query:
                     if params:
                         cursor.execute(fixed_query, params)
@@ -271,19 +285,26 @@ class SqliteEngine(Engine[sqlite3.Connection]):
             return table.split(".")[-1]
         return table
     
-    def add_column(self, table: str, column: str, dtype: str) -> None:
+    def _quote_table_name(self, table: str) -> str:
+        """
+        Quote table name to handle reserved keywords like 'default'.
+        """
         table_name = self._strip_db_prefix(table)
-        self.execute(f"ALTER TABLE {table_name} ADD COLUMN {column} {dtype}")
+        return f'"{table_name}"'
+    
+    def add_column(self, table: str, column: str, dtype: str) -> None:
+        quoted_table_name = self._quote_table_name(table)
+        self.execute(f"ALTER TABLE {quoted_table_name} ADD COLUMN {column} {dtype}")
         self._columns.add(column)
     
     def create_table(self, table: str, columns: Dict[str, str], primary_key: Optional[List[str]] = None) -> None:
-        table_name = self._strip_db_prefix(table)
+        quoted_table_name = self._quote_table_name(table)
             
         column_defs = [f"{col} {dtype}" for col, dtype in columns.items()]
         if primary_key:
             column_defs.append(f"PRIMARY KEY ({', '.join(primary_key)})")
         
-        query = f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(column_defs)})"
+        query = f"CREATE TABLE IF NOT EXISTS {quoted_table_name} ({', '.join(column_defs)})"
         self.execute(query)
 
     @property
@@ -293,8 +314,8 @@ class SqliteEngine(Engine[sqlite3.Connection]):
     @property
     def _sqlite_types(self):
         cursor = self.conn.cursor()
-        table_name = self._strip_db_prefix(SCHEMA_PARAMS.EVENTS_TABLE)
-        cursor.execute(f"PRAGMA table_info({table_name})")
+        quoted_table_name = self._quote_table_name(self.table_name)
+        cursor.execute(f"PRAGMA table_info({quoted_table_name})")
         return [(row['name'], row['type']) for row in cursor.fetchall()]
 
     @property
@@ -320,10 +341,10 @@ class SqliteEngine(Engine[sqlite3.Connection]):
 
     def set_value(self, key: str, value: Any, track_id: Optional[str] = None) -> None:
         if key not in self.columns:
-            self.add_column(SCHEMA_PARAMS.DUCKDB_TABLE, key, self.to_sql_type(value))
+            self.add_column(self.table_name, key, self.to_sql_type(value))
 
-        table_name = self._strip_db_prefix(SCHEMA_PARAMS.DUCKDB_TABLE)
-        query = f"UPDATE {table_name} SET {key} = ?"
+        quoted_table_name = self._quote_table_name(self.table_name)
+        query = f"UPDATE {quoted_table_name} SET {key} = ?"
         params = [value]
         
         if track_id is not None:
@@ -342,8 +363,8 @@ class SqliteEngine(Engine[sqlite3.Connection]):
     ) -> None:
         params = [value, where_value]
         
-        table_name = self._strip_db_prefix(SCHEMA_PARAMS.DUCKDB_TABLE)
-        sql = f"UPDATE {table_name} SET {key} = ? WHERE {where_key} = ?"
+        quoted_table_name = self._quote_table_name(self.table_name)
+        sql = f"UPDATE {quoted_table_name} SET {key} = ? WHERE {where_key} = ?"
         
         if track_id is not None:
             sql += f" AND {SCHEMA_PARAMS.TRACK_ID} = ?"
@@ -360,8 +381,8 @@ class SqliteEngine(Engine[sqlite3.Connection]):
             
         if self.assets.remove_hash(hash_value, remove_keys=remove_keys):
             if column:
-                table_name = self._strip_db_prefix(SCHEMA_PARAMS.DUCKDB_TABLE)
-                sql = f"UPDATE {table_name} SET {column} = NULL WHERE {column} = ?"
+                quoted_table_name = self._quote_table_name(self.table_name)
+                sql = f"UPDATE {quoted_table_name} SET {column} = NULL WHERE {column} = ?"
                 self.execute(sql, [hash_value])
             return True
         return False
@@ -395,8 +416,8 @@ class SqliteEngine(Engine[sqlite3.Connection]):
                         sanitized_values.append(value)
 
                 placeholders = ', '.join(['?' for _ in range(size)])
-                table_name = self._strip_db_prefix(SCHEMA_PARAMS.DUCKDB_TABLE)
-                query = f"INSERT INTO {table_name} ({', '.join(keys)}) VALUES ({placeholders})"
+                quoted_table_name = self._quote_table_name(self.table_name)
+                query = f"INSERT INTO {quoted_table_name} ({', '.join(keys)}) VALUES ({placeholders})"
 
                 self.conn.execute(query, sanitized_values)
 
@@ -409,7 +430,7 @@ class SqliteEngine(Engine[sqlite3.Connection]):
             raise
 
     def _ensure_events_table(self) -> None:
-        events_table = self._strip_db_prefix(SCHEMA_PARAMS.DUCKDB_TABLE)
+        events_table = self._strip_db_prefix(self.table_name)
         
         cursor = self.conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (events_table,))
@@ -420,7 +441,7 @@ class SqliteEngine(Engine[sqlite3.Connection]):
                 TRACKER_CONSTANTS.TIMESTAMP: "TEXT"
             }
             primary_key = [SCHEMA_PARAMS.TRACK_ID, TRACKER_CONSTANTS.TIMESTAMP]
-            self.create_table(SCHEMA_PARAMS.DUCKDB_TABLE, columns, primary_key)
+            self.create_table(self.table_name, columns, primary_key)
             logger.info(f"Created events table: {events_table}")
         else:
             logger.debug(f"Events table already exists: {events_table}")
@@ -428,13 +449,13 @@ class SqliteEngine(Engine[sqlite3.Connection]):
         self._columns = set(self.dtypes.keys())
 
     def count_records(self, track_id: Optional[str] = None) -> int:
-        table_name = self._strip_db_prefix(SCHEMA_PARAMS.DUCKDB_TABLE)
+        quoted_table_name = self._quote_table_name(self.table_name)
         
         if track_id is not None:
-            query = f"SELECT COUNT(*) FROM {table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
+            query = f"SELECT COUNT(*) FROM {quoted_table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
             result = self.execute(query, [track_id]).fetchall()
         else:
-            query = f"SELECT COUNT(*) FROM {table_name}"
+            query = f"SELECT COUNT(*) FROM {quoted_table_name}"
             result = self.execute(query).fetchall()
         
         return result[0][0]

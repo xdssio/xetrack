@@ -2,10 +2,10 @@ import os
 
 
 class SCHEMA_PARAMS:
-    DUCKDB_TABLE: str = "db.events"
-    SQLITE_TABLE: str = "events"
+    DUCKDB_TABLE: str = "db.default"
+    SQLITE_TABLE: str = "default"
     TRACK_ID: str = "track_id"
-    EVENTS_TABLE: str = "events"
+    DEFAULT_TABLE: str = "default"  # Default table name, can be overridden
 
 
 class DEFAULTS:

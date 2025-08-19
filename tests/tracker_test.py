@@ -121,7 +121,7 @@ def test_git_info():
 
 def test_tracker_context_manager():
     with SqliteEngine(Tracker.IN_MEMORY) as engine:
-        df = engine.execute_sql("SELECT * FROM main.events")
+        df = engine.execute_sql(f"SELECT * FROM {engine.table_name}")
     assert len(df) == 0
 
 def test_primitive_datatypes():
