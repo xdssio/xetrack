@@ -48,6 +48,13 @@ tracker.to_df(all=True)  # Retrive all the runs as dataframe
 0  26-09-2023 12:17:00.342814  398c985a-dc15-42da-88aa-6ac6cbf55794  resnet18   0.1      1       0.9
 ```
 
+**Multiple experiment types**: Use different table names to organize different types of experiments in the same database.
+
+```python
+model_tracker = Tracker('experiments.db', table_name='model_experiments')
+data_tracker = Tracker('experiments.db', table_name='data_experiments')
+```
+
 **Params** are values which are added to every future row:
 
 ```python

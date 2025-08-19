@@ -157,7 +157,7 @@ def test_cli_sql():
     result = Tracker(db=database, params={"model": 'lightgbm'}).log(
         {"accuracy": 0.9})
     result = runner.invoke(
-        app, args=['sql', database, "SELECT * FROM events;"])
+        app, args=['sql', database, 'SELECT * FROM "default";'])
     assert result.exit_code == 0
     assert 'accuracy' in result.output
     assert '0.9' in result.output

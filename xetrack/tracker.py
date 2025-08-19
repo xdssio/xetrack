@@ -52,6 +52,7 @@ class Tracker:
         warnings: bool = True,
         git_root: Optional[str] = None,
         engine: Literal["duckdb", "sqlite"] = "sqlite",
+        table_name: str = SCHEMA_PARAMS.EVENTS_TABLE,
     ):
         """
         Initializes the class instance.
@@ -71,14 +72,15 @@ class Tracker:
         :param compress: If True, the database will be compressed. Default is False.
         :param warnings: If True, warnings will be printed. Default is True.
         :param git_root: Directory to use for git operations. If provided, git commit hash will be tracked.
-        :param engine: Database engine to use, either "duckdb" or "sqlite". Default is "duckdb".
+        :param engine: Database engine to use, either "duckdb" or "sqlite". Default is "sqlite".
+        :param table_name: Name of the table to store events. Default is "default". Allows multiple experiment types.
         """
         self.skip_insert = False
         if db == Tracker.SKIP_INSERT:
             self.skip_insert = True
             db = Tracker.IN_MEMORY
-                
-        self.engine = self._get_engine(db, engine, compress)
+        
+        self.engine = self._get_engine(db, engine, compress, table_name)
             
         if params is None:
             params = {}
@@ -99,7 +101,7 @@ class Tracker:
                 TRACKER_CONSTANTS.GIT_COMMIT_KEY, get_commit_hash(git_root=git_root)
             )
 
-    def _get_engine(self, db:str, engine: Literal["duckdb", "sqlite"], compress: bool=False) -> Engine[Any]:
+    def _get_engine(self, db:str, engine: Literal["duckdb", "sqlite"], compress: bool=False, table_name: str = SCHEMA_PARAMS.EVENTS_TABLE) -> Engine[Any]:
         """
         Create and return the appropriate database connection implementation.
         
@@ -107,6 +109,7 @@ class Tracker:
             db: Database file path
             engine: Database engine, either 'duckdb' or 'sqlite'
             compress: Whether to compress the database
+            table_name: Name of the table to store events
             
         Returns:
             A Connection implementation
@@ -117,11 +120,11 @@ class Tracker:
         if engine == "duckdb":
             try:
                 from xetrack.duckdb import DuckDBEngine
-                return DuckDBEngine(db=db, compress=compress)
+                return DuckDBEngine(db=db, compress=compress, table_name=table_name)
             except ImportError:
                 raise ImportError("DuckDB is not installed. Please install it with 'pip install duckdb'")
                 
-        return SqliteEngine(db=db, compress=compress)
+        return SqliteEngine(db=db, compress=compress, table_name=table_name)
     
     @property
     def conn(self):
@@ -196,7 +199,8 @@ class Tracker:
         """
         if reset:
             # Only drop the table if it exists and we're resetting
-            self.conn.execute(f"DROP TABLE IF EXISTS {SCHEMA_PARAMS.DUCKDB_TABLE}")
+            # Use the engine's execute method which handles table name quoting
+            self.engine.execute(f"DROP TABLE IF EXISTS {self.engine.table_name}")
             
             # Force table recreation by initializing the database structure
             self.engine._init_database()
@@ -477,7 +481,7 @@ class Tracker:
         if key not in self._columns:
             # Use the engine's add_column method instead of direct SQL execution
             # This ensures proper handling of table names for each database engine
-            self.engine.add_column(SCHEMA_PARAMS.DUCKDB_TABLE, key, dtype)
+            self.engine.add_column(self.engine.table_name, key, dtype)
             self._columns.add(key)
         elif self.warnings and self.db != Tracker.IN_MEMORY:
             self.logger.warning(f"Column {key} already exists")
@@ -701,9 +705,8 @@ class Tracker:
         keys, values, size = self._to_key_values(data)
         if not self.skip_insert:
             # Use the engine's execute method to handle table names correctly
-            table_name = SCHEMA_PARAMS.DUCKDB_TABLE
             placeholders = ', '.join(['?' for _ in range(size)])
-            query = f"INSERT INTO {table_name} ({', '.join(keys)}) VALUES ({placeholders})"
+            query = f"INSERT INTO {self.engine.table_name} ({', '.join(keys)}) VALUES ({placeholders})"
             self.engine.execute(query, values)
         if self.logger:
             self.logger.track(data)
@@ -714,8 +717,7 @@ class Tracker:
         return self.head().__repr__()
 
     def to_df(self, all: bool = False):
-        table_name = SCHEMA_PARAMS.DUCKDB_TABLE
-        query = f"SELECT * FROM {table_name}"
+        query = f"SELECT * FROM {self.engine.table_name}"
         if not all:
             query += f" WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
             cursor = self.engine.execute(query, [self.track_id])
@@ -736,9 +738,8 @@ class Tracker:
             return pd.DataFrame.from_records(rows, columns=columns)
 
     def __getitem__(self, item: Union[str, int]) -> Any:
-        table_name = SCHEMA_PARAMS.DUCKDB_TABLE
         if isinstance(item, str):
-            query = f"SELECT {item} FROM {table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
+            query = f"SELECT {item} FROM {self.engine.table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
             cursor = self.engine.execute(query, [self.track_id])
             
             # Convert cursor results to a DataFrame
@@ -755,7 +756,7 @@ class Tracker:
                 return df[item]
             
         elif isinstance(item, int):
-            query = f"SELECT * FROM {table_name} LIMIT 1 OFFSET ?"
+            query = f"SELECT * FROM {self.engine.table_name} LIMIT 1 OFFSET ?"
             cursor = self.engine.execute(query, [item-1])
             
             # Convert cursor results to a DataFrame
@@ -784,8 +785,7 @@ class Tracker:
             self.set_param(key, value)
 
     def head(self, n: int = 5):
-        table_name = SCHEMA_PARAMS.DUCKDB_TABLE
-        query = f"SELECT * FROM {table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ? LIMIT ?"
+        query = f"SELECT * FROM {self.engine.table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ? LIMIT ?"
         cursor = self.engine.execute(query, [self.track_id, n])
         
         # Convert cursor results to a DataFrame
@@ -801,8 +801,7 @@ class Tracker:
             return pd.DataFrame.from_records(rows, columns=columns)
 
     def tail(self, n: int = 5):
-        table_name = SCHEMA_PARAMS.DUCKDB_TABLE
-        query = f"SELECT * FROM {table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ? ORDER BY {TRACKER_CONSTANTS.TIMESTAMP} DESC LIMIT ?"
+        query = f"SELECT * FROM {self.engine.table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ? ORDER BY {TRACKER_CONSTANTS.TIMESTAMP} DESC LIMIT ?"
         cursor = self.engine.execute(query, [self.track_id, n])
         
         # Convert cursor results to a DataFrame

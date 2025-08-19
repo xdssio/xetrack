@@ -11,6 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
+    def __init__(self, db: str = "track.db", compress: bool = False, table_name: str = SCHEMA_PARAMS.EVENTS_TABLE):
+        # For DuckDB, we need to ensure table names have the db. prefix
+        if "." not in table_name:
+            table_name = f"db.{table_name}"
+        super().__init__(db, compress, table_name)
+    
     def _init_connection(self) -> duckdb.DuckDBPyConnection:
         """
         Initialize a DuckDB connection and attach the SQLite database.
@@ -26,7 +32,7 @@ class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
         conn.execute("LOAD sqlite;")
 
         # Get the database name from table schema
-        db_name = SCHEMA_PARAMS.DUCKDB_TABLE.split(".")[0]
+        db_name = self.table_name.split(".")[0] if "." in self.table_name else "db"
         
         # Check if the database is already attached
         is_attached = conn.execute(
@@ -54,15 +60,15 @@ class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
         DuckDB works with the db prefix in table names.
         """
         # Check if the table already exists
-        db_name = SCHEMA_PARAMS.DUCKDB_TABLE.split(".")[0]
-        table_name = SCHEMA_PARAMS.EVENTS_TABLE
+        db_name = self.table_name.split(".")[0] if "." in self.table_name else "db"
+        table_only_name = self.table_name.split(".")[-1]
         
         result = self.execute(
             f"""
             SELECT count(*) 
-            FROM information_schema.tables 
+            FROM system.information_schema.tables 
             WHERE table_schema = '{db_name}' 
-            AND table_name = '{SCHEMA_PARAMS.EVENTS_TABLE.split(".")[-1]}'
+            AND table_name = '{table_only_name}'
             """
         ).fetchone()
         
@@ -73,10 +79,10 @@ class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
                 TRACKER_CONSTANTS.TIMESTAMP: "VARCHAR"
             }
             primary_key = [SCHEMA_PARAMS.TRACK_ID, TRACKER_CONSTANTS.TIMESTAMP]
-            self.create_table(SCHEMA_PARAMS.DUCKDB_TABLE, columns, primary_key)
-            logger.info(f"Created events table: {table_name}")
+            self.create_table(self.table_name, columns, primary_key)
+            logger.info(f"Created events table: {self.table_name}")
         else:
-            logger.debug(f"Events table already exists: {table_name}")
+            logger.debug(f"Events table already exists: {self.table_name}")
             
         # Populate the columns set with existing columns
         self._columns = set(self.dtypes.keys())
@@ -121,12 +127,13 @@ class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
 
     @property
     def _duckdb_types(self):
+        table_only_name = self.table_name.split(".")[-1]
         return self.execute(
             f"""
             SELECT column_name, data_type
             FROM system.information_schema.columns
             WHERE table_schema = 'main'
-            AND table_name = '{SCHEMA_PARAMS.EVENTS_TABLE}'
+            AND table_name = '{table_only_name}'
             """
         ).fetchall()
 
@@ -167,9 +174,9 @@ class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
             track_id: The track ID used to identify the specific record in the table.
         """
         if key not in self.columns:
-            self.add_column(SCHEMA_PARAMS.DUCKDB_TABLE, key, self.to_sql_type(value))
+            self.add_column(self.table_name, key, self.to_sql_type(value))
 
-        query = f"UPDATE {SCHEMA_PARAMS.DUCKDB_TABLE} SET {key} = ?"
+        query = f"UPDATE {self.table_name} SET {key} = ?"
         params = [value]
         
         if track_id is not None:
@@ -189,7 +196,7 @@ class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
         """Sets the value of a specific key in the database table given a where key value pair."""
         params = [value, where_value]
         
-        sql = f"UPDATE {SCHEMA_PARAMS.DUCKDB_TABLE} SET {key} = ? WHERE {where_key} = ?"
+        sql = f"UPDATE {self.table_name} SET {key} = ? WHERE {where_key} = ?"
         
         if track_id is not None:
             sql += f" AND {SCHEMA_PARAMS.TRACK_ID} = ?"
@@ -217,7 +224,7 @@ class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
             
         if self.assets.remove_hash(hash_value, remove_keys=remove_keys):
             if column:
-                sql = f"UPDATE {SCHEMA_PARAMS.DUCKDB_TABLE} SET {column} = NULL WHERE {column} = ?"
+                sql = f"UPDATE {self.table_name} SET {column} = NULL WHERE {column} = ?"
                 self.execute(sql, [hash_value])
             return True
         return False
@@ -246,7 +253,7 @@ class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
                         sanitized_values.append(val)
                 
                 placeholders = ', '.join(['?' for _ in range(size)])
-                query = f"INSERT INTO {SCHEMA_PARAMS.DUCKDB_TABLE} ({', '.join(keys)}) VALUES ({placeholders})"
+                query = f"INSERT INTO {self.table_name} ({', '.join(keys)}) VALUES ({placeholders})"
                 self.execute(query, sanitized_values)
             except Exception as e:
                 logger.error(f"Error inserting data: {str(e)}")
@@ -264,10 +271,10 @@ class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
             Number of records matching the criteria
         """
         if track_id is not None:
-            query = f"SELECT COUNT(*) FROM {SCHEMA_PARAMS.DUCKDB_TABLE} WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
+            query = f"SELECT COUNT(*) FROM {self.table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
             result = self.execute(query, [track_id]).fetchall()
         else:
-            query = f"SELECT COUNT(*) FROM {SCHEMA_PARAMS.DUCKDB_TABLE}"
+            query = f"SELECT COUNT(*) FROM {self.table_name}"
             result = self.execute(query).fetchall()
         
         return result[0][0]
