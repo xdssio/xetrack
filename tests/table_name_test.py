@@ -27,7 +27,7 @@ class TestTableName:
     def test_custom_table_name_sqlite(self, temp_db):
         """Test custom table names with SQLite engine"""
         # Create tracker with custom table name
-        tracker = Tracker(db=temp_db, engine="sqlite", table_name="experiments")
+        tracker = Tracker(db=temp_db, engine="sqlite", table="experiments")
         assert tracker.table_name == "experiments"
         assert tracker.engine.table_name == "experiments"
         
@@ -36,7 +36,7 @@ class TestTableName:
         tracker.log({"accuracy": 0.92, "epoch": 2})
         
         # Verify data is stored in the custom table
-        reader = Reader(db=temp_db, engine="sqlite", table_name="experiments")
+        reader = Reader(db=temp_db, engine="sqlite", table="experiments")
         df = reader.to_df()
         assert len(df) == 2
         assert "accuracy" in df.columns
@@ -46,7 +46,7 @@ class TestTableName:
         """Test custom table names with DuckDB engine"""
         try:
             # Create tracker with custom table name
-            tracker = Tracker(db=temp_db, engine="duckdb", table_name="ml_experiments")
+            tracker = Tracker(db=temp_db, engine="duckdb", table="ml_experiments")
             # DuckDB should add db. prefix automatically
             assert tracker.table_name == "db.ml_experiments"
             assert tracker.engine.table_name == "db.ml_experiments"
@@ -56,7 +56,7 @@ class TestTableName:
             tracker.log({"loss": 0.08, "epoch": 2})
             
             # Verify data is stored in the custom table
-            reader = Reader(db=temp_db, engine="duckdb", table_name="ml_experiments")
+            reader = Reader(db=temp_db, engine="duckdb", table="ml_experiments")
             df = reader.to_df()
             assert len(df) == 2
             assert "loss" in df.columns
@@ -67,16 +67,16 @@ class TestTableName:
     def test_multiple_tables_same_db(self, temp_db):
         """Test multiple experiment types in the same database"""
         # Create two different experiment types
-        model_tracker = Tracker(db=temp_db, engine="sqlite", table_name="model_experiments")
-        data_tracker = Tracker(db=temp_db, engine="sqlite", table_name="data_experiments")
+        model_tracker = Tracker(db=temp_db, engine="sqlite", table="model_experiments")
+        data_tracker = Tracker(db=temp_db, engine="sqlite", table="data_experiments")
         
         # Log data to different tables
         model_tracker.log({"model": "resnet", "accuracy": 0.9})
         data_tracker.log({"dataset": "cifar10", "size": 50000})
         
         # Verify each table has its own data
-        model_reader = Reader(db=temp_db, engine="sqlite", table_name="model_experiments")
-        data_reader = Reader(db=temp_db, engine="sqlite", table_name="data_experiments")
+        model_reader = Reader(db=temp_db, engine="sqlite", table="model_experiments")
+        data_reader = Reader(db=temp_db, engine="sqlite", table="data_experiments")
         
         model_df = model_reader.to_df()
         data_df = data_reader.to_df()
@@ -91,12 +91,12 @@ class TestTableName:
     def test_reader_with_custom_table(self, temp_db):
         """Test Reader class with custom table names"""
         # Create some data
-        tracker = Tracker(db=temp_db, engine="sqlite", table_name="test_table")
+        tracker = Tracker(db=temp_db, engine="sqlite", table="test_table")
         tracker.log({"x": 1, "y": 2})
         tracker.log({"x": 3, "y": 4})
         
         # Read with custom table name
-        reader = Reader(db=temp_db, engine="sqlite", table_name="test_table")
+        reader = Reader(db=temp_db, engine="sqlite", table="test_table")
         
         # Test various reader methods
         df = reader.to_df()
@@ -115,10 +115,10 @@ class TestTableName:
     
     def test_set_value_with_custom_table(self, temp_db):
         """Test set_value functionality with custom tables"""
-        tracker = Tracker(db=temp_db, engine="sqlite", table_name="custom_table")
+        tracker = Tracker(db=temp_db, engine="sqlite", table="custom_table")
         tracker.log({"score": 0.8})
         
-        reader = Reader(db=temp_db, engine="sqlite", table_name="custom_table")
+        reader = Reader(db=temp_db, engine="sqlite", table="custom_table")
         
         # Set a new value
         reader.set_value("final_score", 0.95)
@@ -129,11 +129,11 @@ class TestTableName:
     
     def test_delete_run_with_custom_table(self, temp_db):
         """Test delete_run functionality with custom tables"""
-        tracker = Tracker(db=temp_db, engine="sqlite", table_name="delete_test")
+        tracker = Tracker(db=temp_db, engine="sqlite", table="delete_test")
         tracker.log({"value": 1})
         track_id = tracker.track_id
         
-        reader = Reader(db=temp_db, engine="sqlite", table_name="delete_test")
+        reader = Reader(db=temp_db, engine="sqlite", table="delete_test")
         assert len(reader.to_df()) == 1
         
         # Delete the run
@@ -146,13 +146,13 @@ class TestTableName:
         valid_names = ["experiments", "test_table", "model_v1", "data123"]
         
         for table_name in valid_names:
-            tracker = Tracker(db=temp_db, engine="sqlite", table_name=table_name)
+            tracker = Tracker(db=temp_db, engine="sqlite", table=table_name)
             assert tracker.table_name == table_name
             
             # Should be able to log data
             tracker.log({"test": 1})
             
-            reader = Reader(db=temp_db, engine="sqlite", table_name=table_name)
+            reader = Reader(db=temp_db, engine="sqlite", table=table_name)
             df = reader.to_df()
             assert len(df) == 1
     
@@ -160,13 +160,13 @@ class TestTableName:
         """Test that assets work with custom table names"""
         try:
             # Create tracker with custom table and some object
-            tracker = Tracker(db=temp_db, engine="sqlite", table_name="assets_test")
+            tracker = Tracker(db=temp_db, engine="sqlite", table="assets_test")
             
             # Create a simple object to store
             test_obj = {"model": "test", "params": [1, 2, 3]}
             tracker.log({"obj": test_obj, "accuracy": 0.9})
             
-            reader = Reader(db=temp_db, engine="sqlite", table_name="assets_test")
+            reader = Reader(db=temp_db, engine="sqlite", table="assets_test")
             df = reader.to_df()
             
             # Should have the object stored as hash

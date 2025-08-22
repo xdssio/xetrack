@@ -1,9 +1,15 @@
 import pandas as pd
 from typing import Any, Optional, Literal
 
-from xetrack.engine import DuckDBEngine, SqliteEngine
+from xetrack.engine import SqliteEngine
 from xetrack.config import SCHEMA_PARAMS
 from xetrack.logging import Logger
+
+# Handle DuckDBEngine import with proper error handling
+try:
+    from xetrack.engine import DuckDBEngine
+except ImportError:
+    DuckDBEngine = None
 
 
 class Reader:
@@ -11,7 +17,7 @@ class Reader:
         self,
         db: str,
         engine: Literal["duckdb", "sqlite"] = "sqlite",
-        table_name: str = SCHEMA_PARAMS.DEFAULT_TABLE,
+        table: str = SCHEMA_PARAMS.DEFAULT_TABLE,
     ):
         """
         Initialize a Reader with the specified database file and engine.
@@ -19,14 +25,19 @@ class Reader:
         Args:
             db: The database file path
             engine: The database engine to use, either "duckdb" or "sqlite". Default is "sqlite".
-            table_name: Name of the table to read from. Default is "default". Allows reading different experiment types.
+            table: Name of the table to read from. Default is "default". Allows reading different experiment types.
         """
         self.db = db
-        self.table_name = table_name
+        self.table_name = table
         if engine == "sqlite":
-            self.engine = SqliteEngine(db=db, table_name=table_name)
+            self.engine = SqliteEngine(db=db, table_name=table)
         else:
-            self.engine = DuckDBEngine(db=db, table_name=table_name)
+            if DuckDBEngine is None:
+                raise ImportError(
+                    "DuckDB engine is not available. Install duckdb with: "
+                    "pip install xetrack[duckdb] or pip install duckdb"
+                )
+            self.engine = DuckDBEngine(db=db, table_name=table)
     
     @property
     def conn(self):

@@ -52,7 +52,7 @@ class Tracker:
         warnings: bool = True,
         git_root: Optional[str] = None,
         engine: Literal["duckdb", "sqlite"] = "sqlite",
-        table_name: str = SCHEMA_PARAMS.DEFAULT_TABLE,
+        table: str = SCHEMA_PARAMS.DEFAULT_TABLE,
     ):
         """
         Initializes the class instance.
@@ -73,14 +73,14 @@ class Tracker:
         :param warnings: If True, warnings will be printed. Default is True.
         :param git_root: Directory to use for git operations. If provided, git commit hash will be tracked.
         :param engine: Database engine to use, either "duckdb" or "sqlite". Default is "sqlite".
-        :param table_name: Name of the table to store events. Default is "default". Allows multiple experiment types.
+        :param table: Name of the table to store events. Default is "default". Allows multiple experiment types.
         """
         self.skip_insert = False
         if db == Tracker.SKIP_INSERT:
             self.skip_insert = True
             db = Tracker.IN_MEMORY
         
-        self.engine = self._get_engine(db, engine, compress, table_name)
+        self.engine = self._get_engine(db, engine, compress, table)
             
         if params is None:
             params = {}
@@ -106,7 +106,7 @@ class Tracker:
         db: str,
         engine: Literal["duckdb", "sqlite"],
         compress: bool = False,
-        table_name: str = SCHEMA_PARAMS.DEFAULT_TABLE,
+        table: str = SCHEMA_PARAMS.DEFAULT_TABLE,
     ) -> Engine[Any]:
         """
         Create and return the appropriate database connection implementation.
@@ -115,7 +115,7 @@ class Tracker:
             db: Database file path
             engine: Database engine, either 'duckdb' or 'sqlite'
             compress: Whether to compress the database
-            table_name: Name of the table to store events
+            table: Name of the table to store events
             
         Returns:
             A Connection implementation
@@ -126,11 +126,11 @@ class Tracker:
         if engine == "duckdb":
             try:
                 from xetrack.duckdb import DuckDBEngine
-                return DuckDBEngine(db=db, compress=compress, table_name=table_name)
+                return DuckDBEngine(db=db, compress=compress, table_name=table)
             except ImportError:
                 raise ImportError("DuckDB is not installed. Please install it with 'pip install duckdb'")
                 
-        return SqliteEngine(db=db, compress=compress, table_name=table_name)
+        return SqliteEngine(db=db, compress=compress, table_name=table)
     
     @property
     def conn(self):

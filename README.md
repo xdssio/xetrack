@@ -51,8 +51,8 @@ tracker.to_df(all=True)  # Retrive all the runs as dataframe
 **Multiple experiment types**: Use different table names to organize different types of experiments in the same database.
 
 ```python
-model_tracker = Tracker('experiments.db', table_name='model_experiments')
-data_tracker = Tracker('experiments.db', table_name='data_experiments')
+model_tracker = Tracker('experiments.db', table='model_experiments')
+data_tracker = Tracker('experiments.db', table='data_experiments')
 ```
 
 **Params** are values which are added to every future row:
