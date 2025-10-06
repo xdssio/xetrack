@@ -34,6 +34,9 @@ jobs:
         pip config set global.prefer-binary true
         pip install --upgrade pip setuptools wheel
     
+    - name: Pre-install numpy with pip to ensure wheel usage
+      run: pip install --only-binary=all numpy>=1.20.0
+    
     - name: Load cached venv
       id: cached-poetry-dependencies
       uses: actions/cache@v3
@@ -43,9 +46,7 @@ jobs:
     
     - name: Install dependencies
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-      run: |
-        poetry config installer.prefer-binary true
-        poetry install --no-interaction --no-root
+      run: poetry install --no-interaction --no-root
     
     - name: Install project
       run: poetry install --no-interaction
@@ -80,10 +81,11 @@ jobs:
         pip config set global.prefer-binary true
         pip install --upgrade pip setuptools wheel
     
+    - name: Pre-install numpy with pip to ensure wheel usage
+      run: pip install --only-binary=all numpy>=1.20.0
+    
     - name: Install dependencies
-      run: |
-        poetry config installer.prefer-binary true
-        poetry install --no-interaction
+      run: poetry install --no-interaction
     
     - name: Check code formatting with black (dry-run)
       run: poetry run python -m black --check --diff xetrack tests
@@ -124,10 +126,11 @@ jobs:
         pip config set global.prefer-binary true
         pip install --upgrade pip setuptools wheel
     
+    - name: Pre-install numpy with pip to ensure wheel usage
+      run: pip install --only-binary=all numpy>=1.20.0
+    
     - name: Install dependencies with ${{ matrix.extras }}
-      run: |
-        poetry config installer.prefer-binary true
-        poetry install --no-interaction --extras ${{ matrix.extras }}
+      run: poetry install --no-interaction --extras ${{ matrix.extras }}
     
     - name: Test ${{ matrix.extras }} functionality
       run: |
