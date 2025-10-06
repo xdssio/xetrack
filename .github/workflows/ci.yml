@@ -38,8 +38,14 @@ jobs:
       run: |
         # Ensure we only use binary wheels
         pip install --upgrade pip wheel setuptools
-        # Pre-install numpy first (exact version from poetry.lock)
-        pip install --only-binary=:all: numpy==1.25.2
+        # Install numpy based on Python version
+        if python -c "import sys; exit(0 if sys.version_info[:2] >= (3, 12) else 1)"; then
+          # Python 3.12+ needs numpy 1.26+
+          pip install --only-binary=:all: "numpy>=1.26.0,<2.0"
+        else
+          # Python 3.9-3.11 can use numpy 1.25.2
+          pip install --only-binary=:all: numpy==1.25.2
+        fi
         # Pre-install pandas which depends on numpy
         pip install --only-binary=:all: "pandas>=2.0.3"
         # Pre-install other scientific packages
@@ -93,8 +99,14 @@ jobs:
       run: |
         # Ensure we only use binary wheels
         pip install --upgrade pip wheel setuptools
-        # Pre-install numpy first (exact version from poetry.lock)
-        pip install --only-binary=:all: numpy==1.25.2
+        # Install numpy based on Python version
+        if python -c "import sys; exit(0 if sys.version_info[:2] >= (3, 12) else 1)"; then
+          # Python 3.12+ needs numpy 1.26+
+          pip install --only-binary=:all: "numpy>=1.26.0,<2.0"
+        else
+          # Python 3.9-3.11 can use numpy 1.25.2
+          pip install --only-binary=:all: numpy==1.25.2
+        fi
         # Pre-install pandas which depends on numpy
         pip install --only-binary=:all: "pandas>=2.0.3"
         # Pre-install other scientific packages
@@ -146,8 +158,14 @@ jobs:
       run: |
         # Ensure we only use binary wheels
         pip install --upgrade pip wheel setuptools
-        # Pre-install numpy first (exact version from poetry.lock)
-        pip install --only-binary=:all: numpy==1.25.2
+        # Install numpy based on Python version
+        if python -c "import sys; exit(0 if sys.version_info[:2] >= (3, 12) else 1)"; then
+          # Python 3.12+ needs numpy 1.26+
+          pip install --only-binary=:all: "numpy>=1.26.0,<2.0"
+        else
+          # Python 3.9-3.11 can use numpy 1.25.2
+          pip install --only-binary=:all: numpy==1.25.2
+        fi
         # Pre-install pandas which depends on numpy
         pip install --only-binary=:all: "pandas>=2.0.3"
         # Pre-install other scientific packages
