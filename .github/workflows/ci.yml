@@ -41,7 +41,7 @@ jobs:
       run: |
         echo "Using pip directly for Python 3.12 to avoid Poetry build issues"
         pip install --only-binary :all: numpy pandas scipy scikit-learn
-        pip install pytest duckdb sqlitedict bashplotlib psutil xxhash typer loguru tabulate cloudpickle coolname
+        pip install pytest duckdb sqlitedict bashplotlib psutil xxhash typer loguru tabulate cloudpickle coolname requests
         pip install -e .
     
     - name: Install project (Poetry)
