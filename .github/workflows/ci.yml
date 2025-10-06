@@ -13,10 +13,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         python-version: ['3.10', '3.11', '3.12']
-        exclude:
-          # Skip Python 3.12 on Ubuntu due to Poetry hanging issue
-          - os: ubuntu-latest
-            python-version: '3.12'
 
     steps:
     - uses: actions/checkout@v4
@@ -33,16 +29,13 @@ jobs:
         virtualenvs-create: true
         virtualenvs-in-project: true
     
+    - name: Disable Poetry keyring
+      run: poetry config keyring.enabled false
+    
     - name: Install dependencies
-      timeout-minutes: 3
-      run: |
-        echo "Python version: ${{ matrix.python-version }}"
-        echo "Starting dependency installation..."
-        poetry install --no-interaction --no-root --extras dev
-        echo "Dependencies installed successfully"
+      run: poetry install --no-interaction --no-root --extras dev
     
     - name: Install project
-      timeout-minutes: 2
       run: poetry install --no-interaction --extras dev
     
     - name: Run tests
@@ -69,6 +62,9 @@ jobs:
         version: latest
         virtualenvs-create: true
         virtualenvs-in-project: true
+    
+    - name: Disable Poetry keyring
+      run: poetry config keyring.enabled false
     
     
     - name: Install dependencies
@@ -107,6 +103,9 @@ jobs:
         version: latest
         virtualenvs-create: true
         virtualenvs-in-project: true
+    
+    - name: Disable Poetry keyring
+      run: poetry config keyring.enabled false
     
     
     - name: Install dependencies with ${{ matrix.extras }}
