@@ -36,10 +36,14 @@ jobs:
     
     - name: Pre-install critical packages with wheels
       run: |
-        # Install numpy with specific version range that has wheels
-        pip install --only-binary=:all: "numpy>=1.20.0,<2.0.0"
-        # Pre-install scipy and scikit-learn wheels to avoid build issues
-        pip install --only-binary=:all: "scipy>=1.7.0" "scikit-learn>=1.0.0" || true
+        # Ensure we only use binary wheels
+        pip install --upgrade pip wheel setuptools
+        # Pre-install numpy first (exact version from poetry.lock)
+        pip install --only-binary=:all: numpy==1.25.2
+        # Pre-install pandas which depends on numpy
+        pip install --only-binary=:all: "pandas>=2.0.3"
+        # Pre-install other scientific packages
+        pip install --only-binary=:all: "scipy>=1.10.0" "scikit-learn>=1.0.0" || true
     
     - name: Load cached venv
       id: cached-poetry-dependencies
@@ -87,10 +91,14 @@ jobs:
     
     - name: Pre-install critical packages with wheels
       run: |
-        # Install numpy with specific version range that has wheels
-        pip install --only-binary=:all: "numpy>=1.20.0,<2.0.0"
-        # Pre-install scipy and scikit-learn wheels to avoid build issues
-        pip install --only-binary=:all: "scipy>=1.7.0" "scikit-learn>=1.0.0" || true
+        # Ensure we only use binary wheels
+        pip install --upgrade pip wheel setuptools
+        # Pre-install numpy first (exact version from poetry.lock)
+        pip install --only-binary=:all: numpy==1.25.2
+        # Pre-install pandas which depends on numpy
+        pip install --only-binary=:all: "pandas>=2.0.3"
+        # Pre-install other scientific packages
+        pip install --only-binary=:all: "scipy>=1.10.0" "scikit-learn>=1.0.0" || true
     
     - name: Install dependencies
       run: poetry install --no-interaction --extras dev
@@ -136,10 +144,14 @@ jobs:
     
     - name: Pre-install critical packages with wheels
       run: |
-        # Install numpy with specific version range that has wheels
-        pip install --only-binary=:all: "numpy>=1.20.0,<2.0.0"
-        # Pre-install scipy and scikit-learn wheels to avoid build issues
-        pip install --only-binary=:all: "scipy>=1.7.0" "scikit-learn>=1.0.0" || true
+        # Ensure we only use binary wheels
+        pip install --upgrade pip wheel setuptools
+        # Pre-install numpy first (exact version from poetry.lock)
+        pip install --only-binary=:all: numpy==1.25.2
+        # Pre-install pandas which depends on numpy
+        pip install --only-binary=:all: "pandas>=2.0.3"
+        # Pre-install other scientific packages
+        pip install --only-binary=:all: "scipy>=1.10.0" "scikit-learn>=1.0.0" || true
     
     - name: Install dependencies with ${{ matrix.extras }}
       run: poetry install --no-interaction --extras "dev ${{ matrix.extras }}"
