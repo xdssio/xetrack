@@ -24,7 +24,7 @@ keywords = [
     "data-analysis",
     "data-visualization"
 ]
-license = "BSD-3-Clause"
+license = "MIT"
 
 
 [tool.poetry.dependencies]
