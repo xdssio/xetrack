@@ -60,10 +60,10 @@ jobs:
     
     - name: Install dependencies
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-      run: poetry install --no-interaction --no-root --with dev --extras dev
+      run: poetry install --no-interaction --no-root --extras dev
     
     - name: Install project
-      run: poetry install --no-interaction --with dev --extras dev
+      run: poetry install --no-interaction --extras dev
     
     - name: Run tests
       run: poetry run pytest tests/ -v --tb=short
@@ -113,7 +113,7 @@ jobs:
         pip install --only-binary=:all: "scipy>=1.10.0" "scikit-learn>=1.0.0" || true
     
     - name: Install dependencies
-      run: poetry install --no-interaction --with dev --extras dev
+      run: poetry install --no-interaction --extras dev
     
     - name: Check code formatting with black (dry-run)
       run: poetry run python -m black --check --diff xetrack tests
@@ -172,7 +172,7 @@ jobs:
         pip install --only-binary=:all: "scipy>=1.10.0" "scikit-learn>=1.0.0" || true
     
     - name: Install dependencies with ${{ matrix.extras }}
-      run: poetry install --no-interaction --with dev --extras "dev ${{ matrix.extras }}"
+      run: poetry install --no-interaction --extras "dev ${{ matrix.extras }}"
     
     - name: Test ${{ matrix.extras }} functionality
       run: |
