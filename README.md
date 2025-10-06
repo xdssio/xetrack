@@ -1,5 +1,5 @@
 <p align="center">
-   <img src="https://raw.githubusercontent.com/xdssio/xetrack/main/assets/logo.jpg" alt="logo" width="400" />
+   <img src="https://raw.githubusercontent.com/xdssio/xetrack/main/docs/images/logo.jpg" alt="logo" width="400" />
 </p>
 
 # Xetrack

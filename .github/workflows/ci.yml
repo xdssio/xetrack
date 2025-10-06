@@ -28,7 +28,6 @@ jobs:
         version: latest
         virtualenvs-create: true
         virtualenvs-in-project: true
-        virtualenvs-options-system-site-packages: true
     
     - name: Configure pip to prefer binary wheels
       run: |
@@ -37,14 +36,8 @@ jobs:
     
     - name: Pre-install numpy to avoid build issues
       run: |
-        # Install numpy globally first to ensure it's available
-        if python -c "import sys; exit(0 if sys.version_info[:2] >= (3, 12) else 1)"; then
-          # Python 3.12+ needs numpy 1.26+
-          pip install --only-binary=:all: "numpy>=1.26.0,<2.0"
-        else
-          # Python 3.9-3.11 can use numpy 1.25.2
-          pip install --only-binary=:all: numpy==1.25.2
-        fi
+        # Install numpy 1.26.4 from wheels (works for all Python versions)
+        pip install --only-binary=:all: numpy==1.26.4
     
     - name: Load cached venv
       id: cached-poetry-dependencies
@@ -84,7 +77,6 @@ jobs:
         version: latest
         virtualenvs-create: true
         virtualenvs-in-project: true
-        virtualenvs-options-system-site-packages: true
     
     - name: Configure pip to prefer binary wheels
       run: |
@@ -93,14 +85,8 @@ jobs:
     
     - name: Pre-install numpy to avoid build issues
       run: |
-        # Install numpy globally first to ensure it's available
-        if python -c "import sys; exit(0 if sys.version_info[:2] >= (3, 12) else 1)"; then
-          # Python 3.12+ needs numpy 1.26+
-          pip install --only-binary=:all: "numpy>=1.26.0,<2.0"
-        else
-          # Python 3.9-3.11 can use numpy 1.25.2
-          pip install --only-binary=:all: numpy==1.25.2
-        fi
+        # Install numpy 1.26.4 from wheels (works for all Python versions)
+        pip install --only-binary=:all: numpy==1.26.4
     
     - name: Install dependencies
       run: poetry install --no-interaction --extras dev
@@ -138,7 +124,6 @@ jobs:
         version: latest
         virtualenvs-create: true
         virtualenvs-in-project: true
-        virtualenvs-options-system-site-packages: true
     
     - name: Configure pip to prefer binary wheels
       run: |
@@ -147,14 +132,8 @@ jobs:
     
     - name: Pre-install numpy to avoid build issues
       run: |
-        # Install numpy globally first to ensure it's available
-        if python -c "import sys; exit(0 if sys.version_info[:2] >= (3, 12) else 1)"; then
-          # Python 3.12+ needs numpy 1.26+
-          pip install --only-binary=:all: "numpy>=1.26.0,<2.0"
-        else
-          # Python 3.9-3.11 can use numpy 1.25.2
-          pip install --only-binary=:all: numpy==1.25.2
-        fi
+        # Install numpy 1.26.4 from wheels (works for all Python versions)
+        pip install --only-binary=:all: numpy==1.26.4
     
     - name: Install dependencies with ${{ matrix.extras }}
       run: poetry install --no-interaction --extras "dev ${{ matrix.extras }}"
