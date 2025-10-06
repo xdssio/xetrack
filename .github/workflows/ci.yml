@@ -50,9 +50,7 @@ jobs:
     
     - name: Install dependencies
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-      run: |
-        poetry config installer.modern-installation false
-        poetry install --no-interaction --no-root
+      run: poetry install --no-interaction --no-root
     
     - name: Install project
       run: poetry install --no-interaction
@@ -95,9 +93,7 @@ jobs:
         pip install --only-binary=:all: "scipy>=1.7.0" "scikit-learn>=1.0.0" || true
     
     - name: Install dependencies
-      run: |
-        poetry config installer.modern-installation false
-        poetry install --no-interaction
+      run: poetry install --no-interaction
     
     - name: Check code formatting with black (dry-run)
       run: poetry run python -m black --check --diff xetrack tests
@@ -146,9 +142,7 @@ jobs:
         pip install --only-binary=:all: "scipy>=1.7.0" "scikit-learn>=1.0.0" || true
     
     - name: Install dependencies with ${{ matrix.extras }}
-      run: |
-        poetry config installer.modern-installation false
-        poetry install --no-interaction --extras ${{ matrix.extras }}
+      run: poetry install --no-interaction --extras ${{ matrix.extras }}
     
     - name: Test ${{ matrix.extras }} functionality
       run: |
