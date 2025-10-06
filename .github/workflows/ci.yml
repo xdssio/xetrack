@@ -28,17 +28,16 @@ jobs:
         version: latest
         virtualenvs-create: true
         virtualenvs-in-project: true
+        virtualenvs-options-system-site-packages: true
     
     - name: Configure pip to prefer binary wheels
       run: |
         pip config set global.prefer-binary true
         pip install --upgrade pip setuptools wheel
     
-    - name: Pre-install critical packages with wheels
+    - name: Pre-install numpy to avoid build issues
       run: |
-        # Ensure we only use binary wheels
-        pip install --upgrade pip wheel setuptools
-        # Install numpy based on Python version
+        # Install numpy globally first to ensure it's available
         if python -c "import sys; exit(0 if sys.version_info[:2] >= (3, 12) else 1)"; then
           # Python 3.12+ needs numpy 1.26+
           pip install --only-binary=:all: "numpy>=1.26.0,<2.0"
@@ -46,10 +45,6 @@ jobs:
           # Python 3.9-3.11 can use numpy 1.25.2
           pip install --only-binary=:all: numpy==1.25.2
         fi
-        # Pre-install pandas which depends on numpy
-        pip install --only-binary=:all: "pandas>=2.0.3"
-        # Pre-install other scientific packages
-        pip install --only-binary=:all: "scipy>=1.10.0" "scikit-learn>=1.0.0" || true
     
     - name: Load cached venv
       id: cached-poetry-dependencies
@@ -89,17 +84,16 @@ jobs:
         version: latest
         virtualenvs-create: true
         virtualenvs-in-project: true
+        virtualenvs-options-system-site-packages: true
     
     - name: Configure pip to prefer binary wheels
       run: |
         pip config set global.prefer-binary true
         pip install --upgrade pip setuptools wheel
     
-    - name: Pre-install critical packages with wheels
+    - name: Pre-install numpy to avoid build issues
       run: |
-        # Ensure we only use binary wheels
-        pip install --upgrade pip wheel setuptools
-        # Install numpy based on Python version
+        # Install numpy globally first to ensure it's available
         if python -c "import sys; exit(0 if sys.version_info[:2] >= (3, 12) else 1)"; then
           # Python 3.12+ needs numpy 1.26+
           pip install --only-binary=:all: "numpy>=1.26.0,<2.0"
@@ -107,10 +101,6 @@ jobs:
           # Python 3.9-3.11 can use numpy 1.25.2
           pip install --only-binary=:all: numpy==1.25.2
         fi
-        # Pre-install pandas which depends on numpy
-        pip install --only-binary=:all: "pandas>=2.0.3"
-        # Pre-install other scientific packages
-        pip install --only-binary=:all: "scipy>=1.10.0" "scikit-learn>=1.0.0" || true
     
     - name: Install dependencies
       run: poetry install --no-interaction --extras dev
@@ -148,17 +138,16 @@ jobs:
         version: latest
         virtualenvs-create: true
         virtualenvs-in-project: true
+        virtualenvs-options-system-site-packages: true
     
     - name: Configure pip to prefer binary wheels
       run: |
         pip config set global.prefer-binary true
         pip install --upgrade pip setuptools wheel
     
-    - name: Pre-install critical packages with wheels
+    - name: Pre-install numpy to avoid build issues
       run: |
-        # Ensure we only use binary wheels
-        pip install --upgrade pip wheel setuptools
-        # Install numpy based on Python version
+        # Install numpy globally first to ensure it's available
         if python -c "import sys; exit(0 if sys.version_info[:2] >= (3, 12) else 1)"; then
           # Python 3.12+ needs numpy 1.26+
           pip install --only-binary=:all: "numpy>=1.26.0,<2.0"
@@ -166,10 +155,6 @@ jobs:
           # Python 3.9-3.11 can use numpy 1.25.2
           pip install --only-binary=:all: numpy==1.25.2
         fi
-        # Pre-install pandas which depends on numpy
-        pip install --only-binary=:all: "pandas>=2.0.3"
-        # Pre-install other scientific packages
-        pip install --only-binary=:all: "scipy>=1.10.0" "scikit-learn>=1.0.0" || true
     
     - name: Install dependencies with ${{ matrix.extras }}
       run: poetry install --no-interaction --extras "dev ${{ matrix.extras }}"
