@@ -32,15 +32,14 @@ jobs:
     - name: Disable Poetry keyring
       run: poetry config keyring.enabled false
     
-    - name: Pre-install compiled packages
-      run: |
-        # Pre-install packages that might need compilation to avoid Poetry building from source
-        pip install -U pip wheel setuptools
-        pip install numpy scipy pandas scikit-learn duckdb psutil xxhash
-    
     - name: Install dependencies
       timeout-minutes: 3
-      run: poetry install --no-interaction --no-root --extras dev
+      env:
+        PIP_ONLY_BINARY: ":all:"
+        PIP_NO_BUILD_ISOLATION: "0"
+      run: |
+        echo "Installing with binary-only mode for Python ${{ matrix.python-version }} on ${{ runner.os }}"
+        poetry install --no-interaction --no-root --extras dev -vvv
     
     - name: Install project
       run: poetry install --no-interaction --extras dev
@@ -73,13 +72,10 @@ jobs:
     - name: Disable Poetry keyring
       run: poetry config keyring.enabled false
     
-    - name: Pre-install compiled packages
-      run: |
-        # Pre-install packages that might need compilation to avoid Poetry building from source
-        pip install -U pip wheel setuptools
-        pip install numpy scipy pandas scikit-learn duckdb psutil xxhash
-    
     - name: Install dependencies
+      env:
+        PIP_ONLY_BINARY: ":all:"
+        PIP_NO_BUILD_ISOLATION: "0"
       run: poetry install --no-interaction --extras dev
     
     - name: Check code formatting with black (dry-run)
