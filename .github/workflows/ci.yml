@@ -39,18 +39,13 @@ jobs:
         # Install numpy 1.26.4 from wheels (works for all Python versions)
         pip install --only-binary=:all: numpy==1.26.4
     
-    - name: Load cached venv
-      id: cached-poetry-dependencies
-      uses: actions/cache@v3
-      with:
-        path: .venv
-        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
-    
+    # Skip cache for now to debug hanging issue
     - name: Install dependencies
-      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      timeout-minutes: 10
       run: poetry install --no-interaction --no-root --extras dev
     
     - name: Install project
+      timeout-minutes: 5
       run: poetry install --no-interaction --extras dev
     
     - name: Run tests
