@@ -2,7 +2,6 @@
    <img src="https://raw.githubusercontent.com/xdssio/xetrack/main/docs/images/logo.jpg" alt="logo" width="400" />
 </p>
 
-# Xetrack
 
 <p align="center">
     <a href="https://github.com/xdssio/xetrack/actions/workflows/ci.yml">
@@ -28,11 +27,17 @@
     </a>
 </p>
 
-xetrack is a lightweight package to track experiments benchmarks, and monitor stractured data using [duckdb](https://duckdb.org) and [sqlite](https://sqlite.org/index.html).   
-It is focuesed on simplicity and flexability.
+# xetrack
 
-You create a "Tracker", and let it track data. You can retrive it later as pandas or connect to it as a database.   
-Each instance of the tracker has a "track_id" which is a unique identifier for a single run.
+Lightweight, local-first experiment tracker and benchmark store built on [SQLite](https://sqlite.org/index) and [duckdb](https://duckdb.org).
+
+
+### Why xetrack Exists
+Most experiment trackers — like Weights & Biases — rely on cloud servers...
+xetrack is a lightweight package to track benchmarks, experiments, and monitor structured data.   
+It is focused on simplicity and flexibility.
+You create a "Tracker", and let it track benchmark results, model training and inference monitoring. later retrieve as pandas or connect to it directly as a database.
+
 
 ## Features
 
@@ -71,7 +76,7 @@ tracker.latest
  'track_id': 'cd8afc54-5992-4828-893d-a4cada28dba5'}
 
 
-tracker.to_df(all=True)  # Retrive all the runs as dataframe
+tracker.to_df(all=True)  # retrieve all the runs as dataframe
                     timestamp                              track_id     model  loss  epoch  accuracy
 0  26-09-2023 12:17:00.342814  398c985a-dc15-42da-88aa-6ac6cbf55794  resnet18   0.1      1       0.9
 ```
@@ -153,12 +158,12 @@ $ tracker.log({'accuracy': float(lr.score(X_test, y_test)), 'lr': lr})
 {'accuracy': 0.9777777777777777, 'lr': '53425a65a40a49f4',  # <-- this is the model hash
     'dataset': 'iris', 'model': 'logistic regression', 'timestamp': '2023-12-27 12:21:00.727834', 'track_id': 'wisteria-turkey-4392'}
 
-$ model = tracker.get('53425a65a40a49f4') # retrive an object
+$ model = tracker.get('53425a65a40a49f4') # retrieve an object
 $ model.score(X_test, y_test)
 0.9777777777777777
 ```
 
-You can retrive the model in CLI if you need only the model in production and mind carring the rest of the file
+You can retrieve the model in CLI if you need only the model in production and mind carring the rest of the file
 
 ```bash
 # bash
@@ -174,9 +179,9 @@ with open("model.cloudpickle", 'rb') as f:
 ```
 
 
-### Tips and tricks
+### Tips and Tricks
 
-* ```Tracker(Tracker.IN_MEMORY, logs_path='logs/') ``` Let you run only in memory - great for debuging or working with logs only
+* ```Tracker(Tracker.IN_MEMORY, logs_path='logs/') ``` Let you run only in memory - great for debugging or working with logs only
 
 ### Pandas-like
 
@@ -194,7 +199,7 @@ tracker.to_df() # get pandas dataframe of current run
 ### SQL-like
 You can filter the data using SQL-like syntax using [duckdb](https://duckdb.org/docs):
 * The sqlite database is attached as **db** and the table is **events**. Assts are in the **assets** table.   
-* To use the duckdb as backend, `pip install xetrack[duckdb]` (installs duckdb) and add the parameter engine="duckdb" tpo Tracker like so:
+* To use the duckdb as backend, `pip install xetrack[duckdb]` (installs duckdb) and add the parameter engine="duckdb" to Tracker like so:
 
 ```python
 Tracker(..., engine='duckdb')
@@ -309,12 +314,12 @@ $ xt tail database.db --n=1
 
 $ xet set accuracy 0.8 --where-key params --where-value 1b5b2294fc521d12 --track-id ebony-loon-6720
 
-$ xt delete database.db ebony-loon-6720 # delete experiments wiht a given track_id
+$ xt delete database.db ebony-loon-6720 # delete experiments with a given track_id
 
 # run any other SQL in a oneliner
 $ xt sql database.db "SELECT * FROM db.events;"
 
-# retrive a model (any object) which was saved into a file using cloudpickle
+# retrieve a model (any object) which was saved into a file using cloudpickle
 $ xt assets export database.db hash output 
 
 # remove an object from the assets
