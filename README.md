@@ -1,4 +1,32 @@
+<p align="center">
+   <img src="https://raw.githubusercontent.com/xdssio/xetrack/main/assets/logo.jpg" alt="logo" width="400" />
+</p>
+
 # Xetrack
+
+<p align="center">
+    <a href="https://github.com/xdssio/xetrack/actions/workflows/ci.yml">
+        <img src="https://github.com/xdssio/xetrack/actions/workflows/ci.yml/badge.svg" alt="CI Status" />
+    </a>
+    <a href="https://pypi.org/project/xetrack/">
+        <img src="https://img.shields.io/pypi/v/xetrack.svg" alt="PyPI version" />
+    </a>
+    <a href="https://pypi.org/project/xetrack/">
+        <img src="https://img.shields.io/pypi/pyversions/xetrack.svg" alt="Python versions" />
+    </a>
+    <a href="https://github.com/xdssio/xetrack/blob/main/LICENSE">
+        <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" />
+    </a>
+    <a href="https://github.com/xdssio/xetrack/issues">
+        <img src="https://img.shields.io/github/issues/xdssio/xetrack.svg" alt="GitHub issues" />
+    </a>
+    <a href="https://github.com/xdssio/xetrack/network/members">
+        <img src="https://img.shields.io/github/forks/xdssio/xetrack.svg" alt="GitHub forks" />
+    </a>
+    <a href="https://github.com/xdssio/xetrack/stargazers">
+        <img src="https://img.shields.io/github/stars/xdssio/xetrack.svg" alt="GitHub stars" />
+    </a>
+</p>
 
 xetrack is a lightweight package to track experiments benchmarks, and monitor stractured data using [duckdb](https://duckdb.org) and [sqlite](https://sqlite.org/index.html).   
 It is focuesed on simplicity and flexability.

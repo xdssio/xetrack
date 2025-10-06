@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+    
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --no-root
+    
+    - name: Install project
+      run: poetry install --no-interaction
+    
+    - name: Run tests
+      run: poetry run pytest tests/ -v --tb=short
+    
+    - name: Test CLI
+      run: |
+        poetry run xt --help
+        poetry run python -c "import xetrack; print('Import successful, version:', xetrack.__version__)"
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Install dependencies
+      run: poetry install --no-interaction
+    
+    - name: Check code formatting with black (dry-run)
+      run: poetry run python -m black --check --diff xetrack tests
+      continue-on-error: true
+    
+    - name: Type check with mypy (if available)
+      run: |
+        if poetry run python -c "import mypy" 2>/dev/null; then
+          poetry run mypy xetrack --ignore-missing-imports
+        else
+          echo "mypy not installed, skipping type check"
+        fi
+      continue-on-error: true
+
+  test-extras:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        extras: [duckdb, assets, bashplotlib]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Install dependencies with ${{ matrix.extras }}
+      run: poetry install --no-interaction --extras ${{ matrix.extras }}
+    
+    - name: Test ${{ matrix.extras }} functionality
+      run: |
+        if [ "${{ matrix.extras }}" = "duckdb" ]; then
+          poetry run python -c "import duckdb; print('DuckDB import successful')"
+        elif [ "${{ matrix.extras }}" = "assets" ]; then
+          poetry run python -c "import sqlitedict; print('sqlitedict import successful')"
+        elif [ "${{ matrix.extras }}" = "bashplotlib" ]; then
+          poetry run python -c "import bashplotlib; print('bashplotlib import successful')"
+        fi
