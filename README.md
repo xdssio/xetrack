@@ -283,7 +283,7 @@ Run drift analysis and outlier detection on your logs:
 """
 ```
 
-### ML tracking
+### ML Tracking
 
 ```python
 tracker.logger.experiemnt(<model evaluation and params>) # -> prettily write to logs
