@@ -39,7 +39,14 @@ jobs:
         # Install numpy 1.26.4 from wheels (works for all Python versions)
         pip install --only-binary=:all: numpy==1.26.4
     
+    - name: Install dependencies (Windows alternate)
+      if: runner.os == 'Windows'
+      run: |
+        pip install pytest scikit-learn pandas numpy>=1.26
+        pip install -e .
+    
     - name: Load cached venv
+      if: runner.os != 'Windows'
       id: cached-poetry-dependencies
       uses: actions/cache@v3
       with:
@@ -47,19 +54,32 @@ jobs:
         key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
     
     - name: Install dependencies
-      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      if: runner.os != 'Windows' && steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
       run: poetry install --no-interaction --no-root --extras dev
     
     - name: Install project
+      if: runner.os != 'Windows'
       run: poetry install --no-interaction --extras dev
     
     - name: Run tests
-      run: poetry run pytest tests/ -v --tb=short
+      run: |
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          pytest tests/ -v --tb=short
+        else
+          poetry run pytest tests/ -v --tb=short
+        fi
+      shell: bash
     
     - name: Test CLI
       run: |
-        poetry run xt --help
-        poetry run python -c "import xetrack; print('Import successful, version:', xetrack.__version__)"
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          xt --help
+          python -c "import xetrack; print('Import successful, version:', xetrack.__version__)"
+        else
+          poetry run xt --help
+          poetry run python -c "import xetrack; print('Import successful, version:', xetrack.__version__)"
+        fi
+      shell: bash
 
   lint:
     runs-on: ubuntu-latest
