@@ -32,25 +32,39 @@ jobs:
     - name: Disable Poetry keyring
       run: poetry config keyring.enabled false
     
-    - name: Install dependencies
-      timeout-minutes: 3
-      env:
-        PIP_ONLY_BINARY: ":all:"
-        PIP_NO_BUILD_ISOLATION: "0"
-      run: |
-        echo "Installing with binary-only mode for Python ${{ matrix.python-version }} on ${{ runner.os }}"
-        poetry install --no-interaction --no-root --extras dev -vvv
+    - name: Install dependencies (Poetry)
+      if: matrix.python-version != '3.12'
+      run: poetry install --no-interaction --no-root --extras dev
     
-    - name: Install project
+    - name: Install dependencies (pip for Python 3.12)
+      if: matrix.python-version == '3.12'
+      run: |
+        echo "Using pip directly for Python 3.12 to avoid Poetry build issues"
+        pip install --only-binary :all: numpy pandas scipy scikit-learn
+        pip install pytest duckdb sqlitedict bashplotlib psutil xxhash typer loguru tabulate cloudpickle coolname
+        pip install -e .
+    
+    - name: Install project (Poetry)
+      if: matrix.python-version != '3.12'
       run: poetry install --no-interaction --extras dev
     
     - name: Run tests
-      run: poetry run pytest tests/ -v --tb=short
+      run: |
+        if [ "${{ matrix.python-version }}" = "3.12" ]; then
+          pytest tests/ -v --tb=short
+        else
+          poetry run pytest tests/ -v --tb=short
+        fi
     
     - name: Test CLI
       run: |
-        poetry run xt --help
-        poetry run python -c "import xetrack; print('Import successful, version:', xetrack.__version__)"
+        if [ "${{ matrix.python-version }}" = "3.12" ]; then
+          xt --help
+          python -c "import xetrack; print('Import successful, version:', xetrack.__version__)"
+        else
+          poetry run xt --help
+          poetry run python -c "import xetrack; print('Import successful, version:', xetrack.__version__)"
+        fi
 
   lint:
     runs-on: ubuntu-latest
@@ -73,9 +87,6 @@ jobs:
       run: poetry config keyring.enabled false
     
     - name: Install dependencies
-      env:
-        PIP_ONLY_BINARY: ":all:"
-        PIP_NO_BUILD_ISOLATION: "0"
       run: poetry install --no-interaction --extras dev
     
     - name: Check code formatting with black (dry-run)
