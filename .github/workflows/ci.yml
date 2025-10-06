@@ -34,8 +34,12 @@ jobs:
         pip config set global.prefer-binary true
         pip install --upgrade pip setuptools wheel
     
-    - name: Pre-install numpy with pip to ensure wheel usage
-      run: pip install --only-binary=all numpy>=1.20.0
+    - name: Pre-install critical packages with wheels
+      run: |
+        # Install numpy with specific version range that has wheels
+        pip install --only-binary=:all: "numpy>=1.20.0,<2.0.0"
+        # Pre-install scipy and scikit-learn wheels to avoid build issues
+        pip install --only-binary=:all: "scipy>=1.7.0" "scikit-learn>=1.0.0" || true
     
     - name: Load cached venv
       id: cached-poetry-dependencies
@@ -46,7 +50,9 @@ jobs:
     
     - name: Install dependencies
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-      run: poetry install --no-interaction --no-root
+      run: |
+        poetry config installer.modern-installation false
+        poetry install --no-interaction --no-root
     
     - name: Install project
       run: poetry install --no-interaction
@@ -81,11 +87,17 @@ jobs:
         pip config set global.prefer-binary true
         pip install --upgrade pip setuptools wheel
     
-    - name: Pre-install numpy with pip to ensure wheel usage
-      run: pip install --only-binary=all numpy>=1.20.0
+    - name: Pre-install critical packages with wheels
+      run: |
+        # Install numpy with specific version range that has wheels
+        pip install --only-binary=:all: "numpy>=1.20.0,<2.0.0"
+        # Pre-install scipy and scikit-learn wheels to avoid build issues
+        pip install --only-binary=:all: "scipy>=1.7.0" "scikit-learn>=1.0.0" || true
     
     - name: Install dependencies
-      run: poetry install --no-interaction
+      run: |
+        poetry config installer.modern-installation false
+        poetry install --no-interaction
     
     - name: Check code formatting with black (dry-run)
       run: poetry run python -m black --check --diff xetrack tests
@@ -126,11 +138,17 @@ jobs:
         pip config set global.prefer-binary true
         pip install --upgrade pip setuptools wheel
     
-    - name: Pre-install numpy with pip to ensure wheel usage
-      run: pip install --only-binary=all numpy>=1.20.0
+    - name: Pre-install critical packages with wheels
+      run: |
+        # Install numpy with specific version range that has wheels
+        pip install --only-binary=:all: "numpy>=1.20.0,<2.0.0"
+        # Pre-install scipy and scikit-learn wheels to avoid build issues
+        pip install --only-binary=:all: "scipy>=1.7.0" "scikit-learn>=1.0.0" || true
     
     - name: Install dependencies with ${{ matrix.extras }}
-      run: poetry install --no-interaction --extras ${{ matrix.extras }}
+      run: |
+        poetry config installer.modern-installation false
+        poetry install --no-interaction --extras ${{ matrix.extras }}
     
     - name: Test ${{ matrix.extras }} functionality
       run: |
