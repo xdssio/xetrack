@@ -28,7 +28,7 @@ license = "MIT"
 
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.10"
 pandas = ">=2.0.3"
 psutil = ">=5.9.5"
 coolname = ">=2.2.0"
@@ -64,11 +64,9 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.7",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
     "Topic :: Software Development :: Libraries :: Python Modules",

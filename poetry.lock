@@ -397,7 +397,6 @@ files = [
 
 [package.dependencies]
 numpy = [
-    {version = ">=1.20.3", markers = "python_version < \"3.10\""},
     {version = ">=1.21.0", markers = "python_version >= \"3.10\""},
     {version = ">=1.23.2", markers = "python_version >= \"3.11\""},
 ]
@@ -991,5 +990,5 @@ duckdb = ["duckdb"]
 
 [metadata]
 lock-version = "2.0"
-python-versions = "^3.9"
-content-hash = "d1a602907d73c3d2e8cd3bec4d1d49da8cd3566bfbff42bacdde10118fe84563"
+python-versions = "^3.10"
+content-hash = "34b23720188b133bc28198ed7f4bbc41c25ba3a5aeb1ca365e8c833cc1ffa4f9"
