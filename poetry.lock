@@ -531,4 +531,4 @@ duckdb = []
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "597ac95b4d3fc3cf908577143feac19ea0fabc81f2aeb7d7dceead049c5efd77"
+content-hash = "d8b50fe876af0954e9ba250d345d84f4a15109add7397a033b5ae9b9bde892a6"
