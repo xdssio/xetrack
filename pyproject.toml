@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "xetrack"
-version = "0.4.3"
+version = "0.4.4"
 description = "A simple tool for benchamrking and tracking machine learning models and experiments."
 readme = "README.md"
 packages = [{ include = "xetrack" }]
