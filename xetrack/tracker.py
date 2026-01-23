@@ -48,6 +48,7 @@ class Tracker:
         logs_path: Optional[str] = None,
         logs_file_format: Optional[str] = None,
         logs_stdout: bool = False,
+        jsonl: Optional[str] = None,
         compress: bool = False,
         warnings: bool = True,
         git_root: Optional[str] = None,
@@ -69,6 +70,7 @@ class Tracker:
         :param logs_path: The path to the logs directory. If given, logs will be printed to that file.
         :param logs_file_format: The format of the logs file. Default is "{time:YYYY-MM-DD}.log" (daily). Only apply if logs_path is given.
         :param logs_stdout: If True, logs will be printed to stdout. Default is False.
+        :param jsonl: Path to JSONL file for structured logging. If given, each log entry will be written as JSON.
         :param compress: If True, the database will be compressed. Default is False.
         :param warnings: If True, warnings will be printed. Default is True.
         :param git_root: Directory to use for git operations. If provided, git commit hash will be tracked.
@@ -79,14 +81,15 @@ class Tracker:
         if db == Tracker.SKIP_INSERT:
             self.skip_insert = True
             db = Tracker.IN_MEMORY
-        
+
         self.engine = self._get_engine(db, engine, compress, table)
-            
+
         if params is None:
             params = {}
         self.params = params
         self.track_id = track_id or self.generate_track_id()
-        self.logger = self._build_logger(logs_stdout, logs_path, logs_file_format)
+        self.jsonl_path = jsonl
+        self.logger = self._build_logger(logs_stdout, logs_path, logs_file_format, jsonl)
         self.warnings = warnings and self.logger is not None
         self._columns = set()
         self._create_events_table(reset=reset)
@@ -170,13 +173,20 @@ class Tracker:
         stdout: bool = False,
         logs_path: Optional[str] = None,
         logs_file_format: Optional[str] = None,
+        jsonl: Optional[str] = None,
     ) -> Optional[Logger]:
         """
         Builds a logger object.
+
+        :param stdout: Whether to log to stdout
+        :param logs_path: Path to log directory
+        :param logs_file_format: Format for log file names
+        :param jsonl: Path to JSONL file for structured logging
+        :return: Logger instance if any logging is enabled, None otherwise
         """
-        if stdout or logs_path:
+        if stdout or logs_path or jsonl:
             return Logger(
-                stdout=stdout, logs_path=logs_path, file_format=logs_file_format
+                stdout=stdout, logs_path=logs_path, file_format=logs_file_format, jsonl=jsonl
             )
         return None
 

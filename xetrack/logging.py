@@ -29,17 +29,19 @@ class Logger:
         logs_path: Optional[str] = None,
         file_format: Optional[str] = None,
         prettify: bool = True,
+        jsonl: Optional[str] = None,
     ):
         self.logs_path = logs_path
         self.stdout = stdout
         self.file_format = file_format or LOGURU_PARAMS.LOG_FILE_FORMAT
         self.prettify = prettify
-        
+        self.jsonl = jsonl
+
         # Get or create the shared logger instance
         if Logger._logger_instance is None:
             Logger._logger_instance = validate_loguru()
         self.logger = Logger._logger_instance
-        
+
         # Configure the logger with this instance's settings
         self._configure_logger()
 
@@ -49,17 +51,18 @@ class Logger:
             'stdout': self.stdout,
             'logs_path': self.logs_path,
             'file_format': self.file_format,
-            'prettify': self.prettify
+            'prettify': self.prettify,
+            'jsonl': self.jsonl
         }
-        
+
         # Only reconfigure if this is different from the current configuration
         if Logger._current_config != current_config:
             # Remove all existing handlers
             self.logger.remove()
-            
+
             # Add custom levels (safe to call multiple times)
             self._add_levels()
-            
+
             # Add stdout handler if requested
             if self.stdout:
                 self.logger.add(
@@ -67,7 +70,7 @@ class Logger:
                     format=LOGURU_PARAMS.FORMAT,  # type: ignore
                     enqueue=False,
                 )
-            
+
             # Add file handler if logs_path is provided
             if self.logs_path:
                 self.logger.add(
@@ -76,7 +79,26 @@ class Logger:
                     enqueue=False,
                     serialize=not self.prettify,
                 )
-            
+
+            # Add JSONL handler if jsonl path is provided
+            if self.jsonl:
+                # Create a custom sink for JSONL serialization
+                def jsonl_sink(message):
+                    """Custom sink for JSONL format"""
+                    with open(self.jsonl, 'a') as f:
+                        f.write(self._jsonl_serializer(message.record))
+
+                # Filter function to only allow custom tracking levels
+                def tracking_filter(record):
+                    """Only allow MONITOR, TRACKING, and EXPERIMENT levels"""
+                    return record["level"].name in ["MONITOR", "TRACKING", "EXPERIMENT"]
+
+                self.logger.add(
+                    jsonl_sink,
+                    filter=tracking_filter,
+                    enqueue=False,
+                )
+
             # Update the current configuration
             Logger._current_config = current_config.copy()
 
@@ -90,6 +112,47 @@ class Logger:
         except Exception:
             # Levels might already exist, which is fine
             pass
+
+    @staticmethod
+    def _jsonl_serializer(record: Dict[str, Any]) -> str:
+        """
+        Serialize log record as JSONL format.
+
+        Creates a single-line JSON entry with log data and metadata.
+        Suitable for machine learning dataset creation and data synthesis.
+
+        :param record: Loguru record dictionary
+        :return: JSON string with newline
+        """
+        # Extract the actual log message
+        message = record["message"]
+
+        # Try to parse message as JSON if it contains structured data
+        try:
+            if message.strip().startswith('{'):
+                data = json.loads(message)
+            else:
+                data = {"message": message}
+        except (json.JSONDecodeError, AttributeError):
+            data = {"message": str(message)}
+
+        # Create flattened JSONL entry
+        jsonl_entry = {
+            "timestamp": record["time"].isoformat(),
+            "level": record["level"].name,
+        }
+
+        # Flatten data fields into the main entry, skipping tracker's timestamp
+        # to avoid collision with loguru's timestamp (which is more standard/ISO)
+        for key, value in data.items():
+            if key != "timestamp":  # Skip tracker's timestamp
+                jsonl_entry[key] = value
+
+        # Add extra metadata if present and not empty
+        if record.get("extra"):
+            jsonl_entry["extra"] = record["extra"]
+
+        return json.dumps(jsonl_entry) + "\n"
 
     def experiment(self, params: Dict[str, Any]):
         self.log(params, LOGURU_PARAMS.EXPERIMENT, indent=4)

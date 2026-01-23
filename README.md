@@ -239,7 +239,7 @@ D SELECT * FROM db.events;
 ```
 
 ### Logger integration
-This is very useful in an environment where you can use normal logs, and don't want to manage a separate logger or file.   
+This is very useful in an environment where you can use normal logs, and don't want to manage a separate logger or file.
 On great use-case is **model monitoring**.
 
 `logs_stdout=true` print to stdout every tracked event
@@ -252,6 +252,59 @@ $ Tracker(db=Tracker.IN_MEMORY, logs_path='logs',logs_stdout=True).log({"accurac
 $ Reader.read_logs(path='logs')
    accuracy                   timestamp                track_id
 0       0.9  2023-12-14 21:47:48.375258  unnatural-polecat-1380
+```
+
+### JSONL Logging for Data Synthesis and GenAI Datasets
+
+JSONL (JSON Lines) format is ideal for building machine learning datasets, data synthesis, and GenAI training data. Each tracking event is written as a single-line JSON with structured metadata.
+
+**Use Cases:**
+- Building datasets for LLM fine-tuning
+- Creating synthetic data for model training
+- Structured data collection for data synthesis pipelines
+- Easy integration with data processing tools
+
+```python
+# Enable JSONL logging
+tracker = Tracker(
+    db='database.db',
+    jsonl='logs/data.jsonl'  # Write structured logs to JSONL
+)
+
+# Every log call writes structured JSON
+tracker.log({"subject": "taxes", "prompt": "Help me with my taxes"})
+tracker.log({"subject": "dance", "prompt": "Help me with my moves"})
+
+# Read JSONL data into pandas DataFrame
+df = Reader.read_jsonl('logs/data.jsonl')
+print(df)
+#                          timestamp     level  subject                    prompt                track_id
+# 0  2024-01-15T10:30:00.123456+00:00  TRACKING    taxes  Help me with my taxes  ancient-falcon-1234
+# 1  2024-01-15T10:35:00.234567+00:00  TRACKING    dance  Help me with my moves  ancient-falcon-1234
+
+# Or use pandas directly (JSONL is standard format)
+import pandas as pd
+df = pd.read_json('logs/data.jsonl', lines=True)
+```
+
+**JSONL Entry Format:**
+Each line contains flattened structured data suitable for ML pipelines:
+```json
+{"timestamp": "2024-01-15T10:30:00.123456+00:00", "level": "TRACKING", "accuracy": 0.95, "loss": 0.05, "epoch": 1, "model": "test-model", "track_id": "xyz-123"}
+```
+
+Note: Timestamp is in ISO 8601 format with timezone for maximum compatibility.
+
+**Reading Data:**
+```python
+# From JSONL file
+df = Reader.read_jsonl('logs/tracking.jsonl')
+
+# From database (class method for convenience)
+df = Reader.read_db('database.db', engine='sqlite', table='default')
+
+# From database with filtering
+df = Reader.read_db('database.db', track_id='specific-run-id', head=100)
 ```
 
 ## Analysis

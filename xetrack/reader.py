@@ -178,9 +178,74 @@ class Reader:
         """Return a pandas dataframe of the logs in the given path"""
         helper = Logger()
         logs_df = pd.DataFrame(helper.read_logs(path, limit=limit))
-        
+
         # Filter out rows where all columns are NaN
         if not logs_df.empty:
             logs_df = logs_df.dropna(how='all')
-        
+
         return logs_df
+
+    @classmethod
+    def read_jsonl(cls, path: str) -> pd.DataFrame:
+        """
+        Read JSONL file into pandas DataFrame.
+
+        Parses JSONL entries created by xetrack logging and returns structured data
+        suitable for data synthesis and GenAI dataset creation.
+
+        Args:
+            path: Path to JSONL file
+
+        Returns:
+            DataFrame with log data including timestamp, level, and all data fields
+
+        Example:
+            >>> df = Reader.read_jsonl("logs/tracking.jsonl")
+            >>> print(df.columns)
+            Index(['timestamp', 'level', 'accuracy', 'loss', ...])
+        """
+        import json
+
+        data = []
+        with open(path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    entry = json.loads(line)
+                    # Entry is already flattened, use it directly
+                    data.append(entry)
+
+        return pd.DataFrame(data)
+
+    @classmethod
+    def read_db(
+        cls,
+        db: str,
+        engine: Literal["duckdb", "sqlite"] = "sqlite",
+        table: str = SCHEMA_PARAMS.DEFAULT_TABLE,
+        track_id: Optional[str] = None,
+        head: Optional[int] = None,
+        tail: Optional[int] = None,
+    ) -> pd.DataFrame:
+        """
+        Class method to read database into DataFrame.
+
+        Convenience method equivalent to Reader(db, engine, table).to_df(**kwargs)
+
+        Args:
+            db: The database file path
+            engine: The database engine to use, either "duckdb" or "sqlite". Default is "sqlite".
+            table: Name of the table to read from. Default is "default".
+            track_id: Optional track ID to filter by
+            head: Optional number of rows from the head
+            tail: Optional number of rows from the tail
+
+        Returns:
+            DataFrame with database contents
+
+        Example:
+            >>> df = Reader.read_db("track.db", engine="sqlite", table="default")
+            >>> latest = Reader.read_db("track.db", tail=10)
+        """
+        reader = cls(db, engine=engine, table=table)
+        return reader.to_df(track_id=track_id, head=head, tail=tail)
