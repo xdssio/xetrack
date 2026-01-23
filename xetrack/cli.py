@@ -1,6 +1,5 @@
 from typing import Literal, Union, List
-from pandas.core.frame import DataFrame
-from pip._internal.utils.misc import hide_value
+import pandas as pd
 import typer
 from xetrack import Reader, copy as copy_db
 from json import dumps
@@ -125,7 +124,7 @@ def sql(db: str = typer.Argument(help='path to database'),
     """Execute a SQL query on the database and show the results as a markdown table - consider that the default table is 'db.default' or 'default'\n\nExample: xt sql path/to/database.db 'SELECT * FROM db.default LIMIT 5' """
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
     reader = Reader(db, engine=engine_literal, table=table)
-    df: DataFrame = reader.engine.execute_sql(query)
+    df: pd.DataFrame = reader.engine.execute_sql(query)
     typer.echo(df.to_markdown())
 
 
@@ -216,12 +215,12 @@ stats_app = typer.Typer(
 app.add_typer(stats_app, name="stats")
 
 
-def _get_df(db: str, columns: str = '', engine: str = "sqlite"):
+def _get_df(db: str, columns: str = "", engine: str = "sqlite") -> pd.DataFrame:
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
-    df = Reader(db, engine=engine_literal).to_df()
+    df: pd.DataFrame = Reader(db, engine=engine_literal).to_df()
     if columns != '':
         columns_list = columns.split(',')
-        df = df[columns_list]
+        df = df[columns_list]  # type: ignore
     return df
 
 
@@ -230,7 +229,7 @@ def describe(db: str = typer.Argument(help='path to database'),
              columns: str = typer.Option('', help='columns to describe - comma separated list (e.g. "col1,col2,col3")'),
              engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """Describe columns in the database - use either numeric or categorical columns."""
-    df = _get_df(db, columns, engine)
+    df: pd.DataFrame = _get_df(db, columns, engine)
     typer.echo(df.describe().to_markdown())
 
 
@@ -239,8 +238,8 @@ def top(db: str = typer.Argument(help='path to database'),
         column: str = typer.Argument(help='Entry with best value'),
         engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """Get the maximum value in the column"""
-    df = _get_df(db, engine=engine)
-    df = df[df[column] == df[column].max()]
+    df: pd.DataFrame = _get_df(db, engine=engine)
+    df = df[df[column] == df[column].max()]  # type: ignore
     typer.echo(str(df.to_markdown()))
 
 
@@ -249,6 +248,6 @@ def bottom(db: str = typer.Argument(help='path to database'),
            column: str = typer.Argument(help='Entry with best value'),
            engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """Get the maximum value in the column"""
-    df = _get_df(db, engine=engine)
-    df = df[df[column] == df[column].min()]
+    df: pd.DataFrame = _get_df(db, engine=engine)
+    df = df[df[column] == df[column].min()]  # type: ignore
     typer.echo(str(df.to_markdown()))

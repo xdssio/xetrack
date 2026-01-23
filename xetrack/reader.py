@@ -55,7 +55,12 @@ class Reader:
     def dtypes(self):
         return self.engine.dtypes
 
-    def to_df(self, track_id: Optional[str] = None, head: Optional[int] = None, tail: Optional[int] = None):
+    def to_df(
+        self,
+        track_id: Optional[str] = None,
+        head: Optional[int] = None,
+        tail: Optional[int] = None,
+    ) -> pd.DataFrame:
         """
         Returns a pandas dataframe of the events table
 
@@ -90,7 +95,7 @@ class Reader:
             
         return results.sort_values(by=['timestamp'])
 
-    def latest(self):
+    def latest(self) -> pd.DataFrame:
         query = f"SELECT {SCHEMA_PARAMS.TRACK_ID} FROM {self.engine.table_name} ORDER BY {SCHEMA_PARAMS.TRACK_ID} DESC LIMIT 1"
         result = self.engine.execute(query).fetchone()
         
@@ -112,7 +117,7 @@ class Reader:
             # Convert to DataFrame
             return pd.DataFrame.from_records(rows, columns=columns)
 
-    def delete_run(self, track_id: str):
+    def delete_run(self, track_id: str) -> bool:
         """
         Delete a run by track_id
         """
