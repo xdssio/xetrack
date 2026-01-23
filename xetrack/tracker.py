@@ -510,8 +510,7 @@ class Tracker:
                     "function_name": func.__name__,
                     "args": str(list(args)),
                     "kwargs": str(kwargs),
-                    "cache_hit": True,
-                    "cache": original_track_id,  # Track lineage
+                    "cache": original_track_id,  # Track lineage - non-empty means cache hit
                     "error": "",
                     "function_time": 0.0,
                 }
@@ -534,10 +533,9 @@ class Tracker:
             stats_process.start()
         data, result, exception = self._run_func(func, *args, **kwargs)
         data.update(params)
-        data["cache_hit"] = False
         # Add cache field for lineage tracking
         if self.cache is not None:
-            data["cache"] = ""  # Empty string indicates not from cache
+            data["cache"] = ""  # Empty string indicates not from cache (computed)
         if self.log_system_params:
             stop_event.set()  # type: ignore
             data.update(stats.get_average_stats())  # type: ignore

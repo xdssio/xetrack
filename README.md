@@ -214,22 +214,22 @@ result3 = tracker.track(expensive_computation, args=[3, 10])  # Computes 3^10 = 
 
 ### Cache Observability & Lineage Tracking
 
-Cache hits are tracked in the database with `cache_hit` and `cache` fields for full lineage tracking:
+Cache behavior is tracked in the database with the `cache` field for full lineage tracking:
 
 ```python
 from xetrack import Reader
 
 df = Reader(db='track.db').to_df()
-print(df[['function_name', 'function_time', 'cache_hit', 'cache', 'track_id']])
-#   function_name           function_time  cache_hit  cache           track_id
-# 0 expensive_computation   2.345          False      ""              abc123      # Original execution
-# 1 expensive_computation   0.000          True       "abc123"        def456      # Cache hit - traces back to abc123
-# 2 expensive_computation   2.891          False      ""              ghi789      # Different args
+print(df[['function_name', 'function_time', 'cache', 'track_id']])
+#   function_name           function_time  cache           track_id
+# 0 expensive_computation   2.345          ""              abc123      # Computed (cache miss)
+# 1 expensive_computation   0.000          "abc123"        def456      # Cache hit - traces back to abc123
+# 2 expensive_computation   2.891          ""              ghi789      # Different args (computed)
 ```
 
 The `cache` field provides lineage:
-- **Empty string ("")**: Result was computed (not from cache)
-- **track_id value**: Result came from cache, references the original execution's track_id
+- **Empty string ("")**: Result was computed (cache miss or no cache)
+- **track_id value**: Result came from cache (cache hit), references the original execution's track_id
 
 ### Reading Cache Directly
 

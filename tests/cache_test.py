@@ -57,7 +57,7 @@ def test_cache_with_kwargs():
 
 
 def test_cache_hit_logging():
-    """Test that cache hits are logged with cache_hit=True and cache field tracks lineage"""
+    """Test that cache field tracks lineage (empty = computed, track_id = cache hit)"""
     tempdir = TemporaryDirectory()
     db_path = os.path.join(tempdir.name, "test.db")
     cache_path = os.path.join(tempdir.name, "cache")
@@ -67,7 +67,7 @@ def test_cache_hit_logging():
     def add(a: int, b: int) -> int:
         return a + b
 
-    # First call - cache miss
+    # First call - computed
     tracker.track(add, args=[1, 2])
 
     # Second call - cache hit
@@ -77,12 +77,10 @@ def test_cache_hit_logging():
     df = Reader(db_path).to_df()
     assert len(df) == 2
 
-    # First call should have cache_hit=False and empty cache field
-    assert df.iloc[0]['cache_hit'] == False
+    # First call should have empty cache field (computed)
     assert df.iloc[0]['cache'] == ""
 
-    # Second call should have cache_hit=True and cache field pointing to first track_id
-    assert df.iloc[1]['cache_hit'] == True
+    # Second call should have cache field pointing to first track_id (cache hit)
     assert df.iloc[1]['cache'] == df.iloc[0]['track_id']  # Lineage tracking
 
     tempdir.cleanup()
@@ -196,13 +194,9 @@ def test_cache_disabled():
     assert result1 == 10
     assert result2 == 10
 
-    # Both calls should have cache_hit=False (no cache enabled)
+    # Cache field should not be present when cache is disabled
     df = Reader(db_path).to_df()
     assert len(df) == 2
-    assert df.iloc[0]['cache_hit'] == False
-    assert df.iloc[1]['cache_hit'] == False
-
-    # Cache field should not be present when cache is disabled
     assert 'cache' not in df.columns
 
     tempdir.cleanup()
