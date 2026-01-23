@@ -105,11 +105,10 @@ def test_reader_read_cache():
     cache_key = tracker._generate_cache_key(multiply, [5, 7], {}, {})
 
     # Read from cache using Reader
-    # Cache now stores (result, track_id) tuple
+    # Cache now stores dict with "result" and "cache" keys
     cached_data = Reader.read_cache(cache_path, cache_key)
-    cached_result, cached_track_id = cached_data
-    assert cached_result == 35
-    assert cached_track_id == tracker.track_id  # Should match current tracker's track_id
+    assert cached_data["result"] == 35
+    assert cached_data["cache"] == tracker.track_id  # Should match current tracker's track_id
 
     tempdir.cleanup()
 
@@ -138,8 +137,8 @@ def test_reader_scan_cache():
     # Should have 2 entries
     assert len(cache_entries) == 2
 
-    # Check that values are correct (cache now stores tuples)
-    results = [value[0] for _, value in cache_entries]  # Extract results from (result, track_id) tuples
+    # Check that values are correct (cache now stores dicts)
+    results = [cached_data["result"] for _, cached_data in cache_entries]
     assert 20 in results  # func1(10) = 20
     assert 30 in results  # func2(10) = 30
 
@@ -173,6 +172,40 @@ def test_cache_with_exception():
 
     # Verify function was called twice
     assert call_count == 2
+
+    tempdir.cleanup()
+
+
+def test_cache_with_different_params():
+    """Test that different tracker params create separate cache entries"""
+    tempdir = TemporaryDirectory()
+    db_path = os.path.join(tempdir.name, "test.db")
+    cache_path = os.path.join(tempdir.name, "cache")
+
+    tracker = Tracker(db=db_path, cache=cache_path)
+
+    def compute(x: int) -> int:
+        return x * 2
+
+    # Same args but different params should create different cache entries
+    result1 = tracker.track(compute, args=[5], params={"model": "v1"})
+    result2 = tracker.track(compute, args=[5], params={"model": "v2"})
+    result3 = tracker.track(compute, args=[5], params={"model": "v1"})  # Should hit cache
+
+    assert result1 == 10
+    assert result2 == 10
+    assert result3 == 10
+
+    # Check logs
+    df = Reader(db_path).to_df()
+    assert len(df) == 3
+
+    # First and second should be computed (different params)
+    assert df.iloc[0]['cache'] == ""
+    assert df.iloc[1]['cache'] == ""
+
+    # Third should be cache hit (same params as first)
+    assert df.iloc[2]['cache'] == df.iloc[0]['track_id']
 
     tempdir.cleanup()
 

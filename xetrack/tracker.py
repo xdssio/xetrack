@@ -504,19 +504,18 @@ class Tracker:
             cache_key = self._generate_cache_key(func, args, kwargs, params)
             if cache_key in self.cache:
                 cached_data = self.cache[cache_key]
-                result, original_track_id = cached_data
                 # Log cache hit
                 data = {
                     "function_name": func.__name__,
                     "args": str(list(args)),
                     "kwargs": str(kwargs),
-                    "cache": original_track_id,  # Track lineage - non-empty means cache hit
+                    "cache": cached_data["cache"],  # Track lineage - non-empty means cache hit
                     "error": "",
                     "function_time": 0.0,
                 }
                 data.update(params)
                 self.log(data)
-                return result
+                return cached_data["result"]
 
         if self.log_network_params:
             net_io_before = psutil.net_io_counters()
@@ -547,10 +546,10 @@ class Tracker:
         logged_data = self.log(data)
 
         # Store in cache if enabled and no exception
-        # Store tuple of (result, track_id) for lineage tracking
+        # Store dict with result and cache (track_id) for lineage tracking
         if self.cache is not None and cache_key is not None and exception is None:
             track_id = logged_data.get(SCHEMA_PARAMS.TRACK_ID, self.track_id)
-            self.cache[cache_key] = (result, track_id)
+            self.cache[cache_key] = {"result": result, "cache": track_id}
 
         if exception is not None and self.raise_on_error:
             raise exception

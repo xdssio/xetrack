@@ -210,6 +210,10 @@ result2 = tracker.track(expensive_computation, args=[2, 10])  # Cache hit!
 
 # Different args - executes function again
 result3 = tracker.track(expensive_computation, args=[3, 10])  # Computes 3^10 = 59049
+
+# Tracker params also affect cache keys
+result4 = tracker.track(expensive_computation, args=[2, 10], params={"model": "v2"})  # Computes (different params)
+result5 = tracker.track(expensive_computation, args=[2, 10], params={"model": "v2"})  # Cache hit!
 ```
 
 ### Cache Observability & Lineage Tracking
@@ -233,7 +237,7 @@ The `cache` field provides lineage:
 
 ### Reading Cache Directly
 
-You can inspect cached values without re-running functions. Cache stores tuples of (result, track_id) for lineage:
+You can inspect cached values without re-running functions. Cache stores dicts with "result" and "cache" keys:
 
 ```python
 from xetrack import Reader
@@ -241,13 +245,12 @@ from xetrack import Reader
 # Read specific cached value by key
 cache_key = tracker._generate_cache_key(expensive_computation, [2, 10], {}, {})
 cached_data = Reader.read_cache('cache_dir', cache_key)
-result, original_track_id = cached_data
-print(f"Result: {result}, Original execution: {original_track_id}")
+print(f"Result: {cached_data['result']}, Original execution: {cached_data['cache']}")
 # Result: 1024, Original execution: abc123
 
 # Scan all cached entries
-for key, (result, track_id) in Reader.scan_cache('cache_dir'):
-    print(f"{key}: result={result}, from track_id={track_id}")
+for key, cached_data in Reader.scan_cache('cache_dir'):
+    print(f"{key}: result={cached_data['result']}, from={cached_data['cache']}")
 ```
 
 ### Use Cases

@@ -260,12 +260,11 @@ class Reader:
             key: Cache key to retrieve
 
         Returns:
-            Tuple of (result, track_id) if found, None otherwise
+            Dict with "result" and "cache" keys if found, None otherwise
 
         Example:
             >>> cached_data = Reader.read_cache("cache_dir", "my_module.my_function:a1b2c3d4")
-            >>> result, track_id = cached_data
-            >>> print(f"Result: {result}, From: {track_id}")
+            >>> print(f"Result: {cached_data['result']}, From: {cached_data['cache']}")
             Result: 42, From: abc123
         """
         try:
@@ -287,11 +286,11 @@ class Reader:
             cache: Path to cache directory
 
         Yields:
-            Tuples of (key, (result, track_id)) for all cached entries
+            Tuples of (key, cached_data) where cached_data is a dict with "result" and "cache" keys
 
         Example:
-            >>> for key, (result, track_id) in Reader.scan_cache("cache_dir"):
-            ...     print(f"{key}: result={result}, from={track_id}")
+            >>> for key, cached_data in Reader.scan_cache("cache_dir"):
+            ...     print(f"{key}: result={cached_data['result']}, from={cached_data['cache']}")
             my_module.my_function:a1b2c3d4: result=42, from=abc123
             my_module.other_function:e5f6g7h8: result="hello", from=def456
         """
