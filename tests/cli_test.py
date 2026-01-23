@@ -3,10 +3,7 @@ from xetrack.cli import app
 from typer.testing import CliRunner
 from xetrack import Reader, Tracker
 import json
-import numpy as np
-import shutil
 import cloudpickle
-import pytest
 import pandas as pd
 runner = CliRunner()
 
@@ -96,8 +93,43 @@ def test_cli_copy():
     for i in range(1, 5):
         assert i in db1_values
         assert i in db2_values
-    
-    
+
+
+def test_cli_copy_with_table_param():
+    """Test CLI copy command with --table parameter"""
+    tempdir = TemporaryDirectory()
+    db1 = f"{tempdir.name}/db1.db"
+    db2 = f"{tempdir.name}/db2.db"
+
+    # Create data in multiple tables
+    exp_tracker = Tracker(db1, table="experiments")
+    exp_tracker.log({"accuracy": 0.95, "epoch": 1})
+    exp_tracker.log({"accuracy": 0.97, "epoch": 2})
+
+    val_tracker = Tracker(db1, table="validation")
+    val_tracker.log({"loss": 0.5, "epoch": 1})
+
+    # Test copying single table
+    result = runner.invoke(app, args=["copy", db1, db2, "--table=experiments"])
+    assert result.exit_code == 0
+
+    # Verify only experiments table was copied
+    exp_reader = Reader(db2, table="experiments")
+    assert len(exp_reader.to_df()) == 2
+
+    # Test copying multiple tables
+    db3 = f"{tempdir.name}/db3.db"
+    result = runner.invoke(
+        app, args=["copy", db1, db3, "--table=experiments", "--table=validation"]
+    )
+    assert result.exit_code == 0
+
+    # Verify both tables were copied
+    exp_reader3 = Reader(db3, table="experiments")
+    val_reader3 = Reader(db3, table="validation")
+    assert len(exp_reader3.to_df()) == 2
+    assert len(val_reader3.to_df()) == 1
+
 
 def test_cli_delete():
     database = NamedTemporaryFile().name
@@ -193,8 +225,8 @@ def test_cli_assets_delete():
     log = source.log({'o1': MockObject('o1'), 'o2': MockObject('o2')})
     assert len(source.assets) == 2
     result = runner.invoke(app, args=['assets', 'delete', db, log['o1']])
-    result.exit_code == 0
-    len(Reader(db).assets) == len(source.assets) == 1
+    assert result.exit_code == 0
+    assert len(Reader(db).assets) == len(source.assets) == 1
 
 
 def test_cli_assets_ls():

@@ -1,4 +1,4 @@
-from typing import Literal, Union
+from typing import Literal, Union, List
 from pandas.core.frame import DataFrame
 from pip._internal.utils.misc import hide_value
 import typer
@@ -49,9 +49,12 @@ def columns(db: str = typer.Argument(help='path to database'),
 @app.command()
 def copy(source: str = typer.Argument(help='path to source database - will not be modified'),
          target: str = typer.Argument(help='path to target database'),
-         assets: bool = typer.Option(True, help='copy the assets')):
-    """Copy the data from one database to another"""
-    copy_db(source=source, target=target, assets=assets)
+         assets: bool = typer.Option(True, help='copy the assets'),
+         table: List[str] = typer.Option(None, help='table(s) to copy - can be specified multiple times (e.g., --table=default --table=other). If not provided, defaults to "default" table')):
+    """Copy the data from one database to another. Supports copying specific tables or defaults to 'default' table."""
+    tables = table if table else None
+    total_copied = copy_db(source=source, target=target, assets=assets, tables=tables)
+    typer.echo(f"Successfully copied {total_copied} events")
 
 
 @app.command()
