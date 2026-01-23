@@ -150,10 +150,10 @@ def export(db: str = typer.Argument(help='path to database'),
         typer.echo(f'Asset {key} saved to {output}')
 
 
-@assets_app.command()
-def delete(db: str = typer.Argument(help='path to database'),
-           asset: str = typer.Argument(help='Asset hash to delete'),
-           column: str = typer.Option(
+@assets_app.command(name="delete")
+def assets_delete(db: str = typer.Argument(help='path to database'),
+                  asset: str = typer.Argument(help='Asset hash to delete'),
+                  column: str = typer.Option(
     None, help='Column to set to None'),
     remove_keys: bool = typer.Option(
     True, help='Remove the keys associated with the asset'),
@@ -164,9 +164,9 @@ def delete(db: str = typer.Argument(help='path to database'),
     Reader(db, engine=engine_literal).remove_asset(asset, column, remove_keys)
 
 
-@assets_app.command()
-def ls(db: str = typer.Argument(help='path to database'),
-       engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
+@assets_app.command(name="ls")
+def assets_ls(db: str = typer.Argument(help='path to database'),
+              engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """list all the assets in the database"""
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
     typer.echo(f"Assets in {db}:\n")
