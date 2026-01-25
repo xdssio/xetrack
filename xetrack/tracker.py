@@ -94,6 +94,7 @@ class Tracker:
         self.cache_path = cache
         self.cache = self._init_cache(cache)
         self._warned_unhashable_types = set()  # Track unhashable types to warn only once
+        self._INVALID_CACHE_VALUE = object()  # Sentinel for unhashable values
         self.logger = self._build_logger(logs_stdout, logs_path, logs_file_format, jsonl)
         self.warnings = warnings and self.logger is not None
         self._columns = set()
@@ -190,49 +191,17 @@ class Tracker:
                 ) from e
         return None
 
-    def _is_cacheable(self, values: List[Any], context: str = "") -> bool:
-        """
-        Check if all values are cacheable (primitive or hashable).
-
-        If any value is not primitive and not hashable, warn and return False.
-        User is responsible for making objects hashable if they want caching.
-
-        :param values: List of values to check
-        :param context: Context string for warning messages
-        :return: True if all values are cacheable, False otherwise
-        """
-        for i, value in enumerate(values):
-            # None and primitives are always cacheable
-            if value is None or self._is_primitive(value):
-                continue
-
-            # Try to hash the object
-            try:
-                hash(value)
-            except TypeError:
-                # Object is unhashable - warn once per type and return False
-                type_name = type(value).__name__
-                if type_name not in self._warned_unhashable_types:
-                    self._warned_unhashable_types.add(type_name)
-                    if self.warnings:
-                        self.logger.warning(
-                            f"Unhashable type '{type_name}' in {context}. "
-                            f"Skipping cache for this call. Make objects hashable (implement __hash__) to enable caching."
-                        )
-                return False
-
-        return True
-
-    def _make_hashable(self, value: Any) -> Any:
+    def _make_hashable(self, value: Any, context: str = "") -> Any:
         """
         Convert a value to a hashable representation for cache keys.
-        Assumes value is already verified as cacheable via _is_cacheable.
 
         For primitives: use as-is
         For hashable objects: use hash()
+        For unhashable objects: return _INVALID_CACHE_VALUE sentinel
 
         :param value: The value to make hashable
-        :return: Hashable representation of the value
+        :param context: Context for warning message (e.g., "arg[0]", "kwarg 'x'")
+        :return: Hashable representation or _INVALID_CACHE_VALUE if unhashable
         """
         # Handle None explicitly
         if value is None:
@@ -242,30 +211,45 @@ class Tracker:
         if self._is_primitive(value):
             return value
 
-        # Use hash for hashable objects
-        return hash(value)
+        # Try to hash the object
+        try:
+            return hash(value)
+        except TypeError:
+            # Object is unhashable - warn once per type and return sentinel
+            type_name = type(value).__name__
+            if type_name not in self._warned_unhashable_types:
+                self._warned_unhashable_types.add(type_name)
+                if self.warnings:
+                    self.logger.warning(
+                        f"Unhashable type '{type_name}'{' in ' + context if context else ''}. "
+                        f"Skipping cache for this call. Make objects hashable (implement __hash__) to enable caching."
+                    )
+            return self._INVALID_CACHE_VALUE
 
-    def _generate_cache_key(self, func: typing.Callable, args: List[Any], kwargs: Dict[str, Any], params: Dict[str, Any]) -> tuple:
+    def _generate_cache_key(self, func: typing.Callable, args: List[Any], kwargs: Dict[str, Any], params: Dict[str, Any]) -> typing.Optional[tuple]:
         """
         Generate a cache key from function name, args, kwargs, and tracker params.
 
-        Handles primitives and hashable objects only.
-        For primitives: use as-is
-        For hashable objects (custom classes with __hash__): use hash()
+        Returns None if any value is unhashable (cannot be cached).
 
         :param func: The function being cached
         :param args: Positional arguments
         :param kwargs: Keyword arguments
         :param params: Tracker parameters
-        :return: Cache key tuple (func_name, args_tuple, kwargs_tuple, params_tuple)
+        :return: Cache key tuple or None if any value is unhashable
         """
         # Create a deterministic representation of the function call
         func_name = f"{func.__module__}.{func.__name__}" if hasattr(func, '__module__') else func.__name__
 
         # Convert to hashable representations
-        args_hashable = tuple(self._make_hashable(arg) for arg in args)
-        kwargs_hashable = tuple(sorted((k, self._make_hashable(v)) for k, v in kwargs.items()))
-        params_hashable = tuple(sorted((k, self._make_hashable(v)) for k, v in params.items()))
+        args_hashable = tuple(self._make_hashable(arg, f"arg[{i}]") for i, arg in enumerate(args))
+        kwargs_hashable = tuple(sorted((k, self._make_hashable(v, f"kwarg '{k}'")) for k, v in kwargs.items()))
+        params_hashable = tuple(sorted((k, self._make_hashable(v, f"param '{k}'")) for k, v in params.items()))
+
+        # Check if any value is invalid (unhashable)
+        all_values = args_hashable + tuple(v for _, v in kwargs_hashable) + tuple(v for _, v in params_hashable)
+        if self._INVALID_CACHE_VALUE in all_values:
+            return None  # Cannot cache this call
 
         return (func_name, args_hashable, kwargs_hashable, params_hashable)
 
@@ -558,29 +542,24 @@ class Tracker:
         if kwargs is None:
             kwargs = {}
 
-        # Check cache if enabled and all values are cacheable
+        # Check cache if enabled (cache_key will be None if any value is unhashable)
         cache_key = None
-        use_cache = False
         if self.cache is not None:
-            # Check if all args, kwargs, and params are cacheable (primitive or hashable)
-            all_values = list(args) + list(kwargs.values()) + list(params.values())
-            if self._is_cacheable(all_values, "arguments/kwargs/params"):
-                use_cache = True
-                cache_key = self._generate_cache_key(func, args, kwargs, params)
-                if cache_key in self.cache:
-                    cached_data = self.cache[cache_key]
-                    # Log cache hit
-                    data = {
-                        "function_name": func.__name__,
-                        "args": str(list(args)),
-                        "kwargs": str(kwargs),
-                        "cache": cached_data["cache"],  # Track lineage - non-empty means cache hit
-                        "error": "",
-                        "function_time": 0.0,
-                    }
-                    data.update(params)
-                    self.log(data)
-                    return cached_data["result"]
+            cache_key = self._generate_cache_key(func, args, kwargs, params)
+            if cache_key is not None and cache_key in self.cache:
+                cached_data = self.cache[cache_key]
+                # Log cache hit
+                data = {
+                    "function_name": func.__name__,
+                    "args": str(list(args)),
+                    "kwargs": str(kwargs),
+                    "cache": cached_data["cache"],  # Track lineage - non-empty means cache hit
+                    "error": "",
+                    "function_time": 0.0,
+                }
+                data.update(params)
+                self.log(data)
+                return cached_data["result"]
 
         if self.log_network_params:
             net_io_before = psutil.net_io_counters()
@@ -597,8 +576,8 @@ class Tracker:
             stats_process.start()
         data, result, exception = self._run_func(func, *args, **kwargs)
         data.update(params)
-        # Add cache field for lineage tracking (only if caching was attempted for this call)
-        if use_cache:
+        # Add cache field for lineage tracking (only if all values were cacheable)
+        if cache_key is not None:
             data["cache"] = ""  # Empty string indicates not from cache (computed)
         if self.log_system_params:
             stop_event.set()  # type: ignore
@@ -610,9 +589,9 @@ class Tracker:
             data.update({"bytes_sent": bytes_sent, "bytes_recv": bytes_recv})
         logged_data = self.log(data)
 
-        # Store in cache if we decided to use cache and there was no exception
+        # Store in cache if all values were cacheable and there was no exception
         # Store dict with result and cache (track_id) for lineage tracking
-        if use_cache and cache_key is not None and exception is None:
+        if cache_key is not None and exception is None:
             track_id = logged_data.get(SCHEMA_PARAMS.TRACK_ID, self.track_id)
             self.cache[cache_key] = {"result": result, "cache": track_id}
 
