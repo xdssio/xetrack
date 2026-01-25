@@ -262,11 +262,40 @@ for key, cached_data in Reader.scan_cache('cache_dir'):
 
 ### Important Notes
 
-- Cache keys are generated from tuples of (function name, args, kwargs, **tracker params**)
+- **Cache keys** are generated from tuples of (function name, args, kwargs, **tracker params**)
 - Different tracker params create separate cache entries (e.g., different model versions)
 - Exceptions are **not cached** - failed calls will retry on next invocation
 - Cache is persistent across Python sessions
 - Lineage tracking: the `cache` field links cached results to their original execution via track_id
+
+### Handling Objects in Cache Keys
+
+Xetrack intelligently handles different types of arguments:
+
+- **Primitives** (int, float, str, bool, bytes): Used as-is in cache keys
+- **Hashable objects** (custom classes with `__hash__`): Uses `hash()` for consistent keys across runs
+- **Unhashable objects** (list, dict, sets): Uses `id()` - cache won't persist across runs (warning issued once per type)
+
+```python
+# Hashable custom objects work great
+class Config:
+    def __init__(self, value):
+        self.value = value
+    def __hash__(self):
+        return hash(self.value)
+    def __eq__(self, other):
+        return isinstance(other, Config) and self.value == other.value
+
+# Cache hits work across different object instances with same hash
+config1 = Config("production")
+config2 = Config("production")
+tracker.track(process, args=[config1])  # Computed
+tracker.track(process, args=[config2])  # Cache hit! (same hash)
+
+# Unhashable objects use id() - won't cache across runs
+tracker.track(process, args=[[1, 2, 3]])  # Computed
+tracker.track(process, args=[[1, 2, 3]])  # Computed again (different list id)
+```
 
 
 ### Tips and Tricks

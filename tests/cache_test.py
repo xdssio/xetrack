@@ -210,6 +210,78 @@ def test_cache_with_different_params():
     tempdir.cleanup()
 
 
+def test_cache_with_hashable_objects():
+    """Test that hashable custom objects work with caching"""
+    tempdir = TemporaryDirectory()
+    db_path = os.path.join(tempdir.name, "test.db")
+    cache_path = os.path.join(tempdir.name, "cache")
+
+    tracker = Tracker(db=db_path, cache=cache_path)
+
+    # Define a hashable custom class
+    class Point:
+        def __init__(self, x, y):
+            self.x = x
+            self.y = y
+
+        def __hash__(self):
+            return hash((self.x, self.y))
+
+        def __eq__(self, other):
+            return isinstance(other, Point) and self.x == other.x and self.y == other.y
+
+    def distance(p: Point) -> float:
+        return (p.x ** 2 + p.y ** 2) ** 0.5
+
+    # Create two Point objects with same values
+    p1 = Point(3, 4)
+    p2 = Point(3, 4)
+
+    # First call
+    result1 = tracker.track(distance, args=[p1])
+    assert result1 == 5.0
+
+    # Second call with different object but same hash - should hit cache
+    result2 = tracker.track(distance, args=[p2])
+    assert result2 == 5.0
+
+    # Verify second call was a cache hit
+    df = Reader(db_path).to_df()
+    assert len(df) == 2
+    assert df.iloc[0]['cache'] == ""
+    assert df.iloc[1]['cache'] == df.iloc[0]['track_id']
+
+    tempdir.cleanup()
+
+
+def test_cache_with_unhashable_objects():
+    """Test that unhashable objects use id() and don't persist across runs"""
+    tempdir = TemporaryDirectory()
+    db_path = os.path.join(tempdir.name, "test.db")
+    cache_path = os.path.join(tempdir.name, "cache")
+
+    tracker = Tracker(db=db_path, cache=cache_path, warnings=False)  # Disable warnings for cleaner test
+
+    def process_list(items: list) -> int:
+        return sum(items)
+
+    # First call with a list (unhashable)
+    result1 = tracker.track(process_list, args=[[1, 2, 3]])
+    assert result1 == 6
+
+    # Second call with same list values - won't hit cache (different id)
+    result2 = tracker.track(process_list, args=[[1, 2, 3]])
+    assert result2 == 6
+
+    # Both should be computed (unhashable objects use id())
+    df = Reader(db_path).to_df()
+    assert len(df) == 2
+    assert df.iloc[0]['cache'] == ""
+    assert df.iloc[1]['cache'] == ""  # Not a cache hit because list ids differ
+
+    tempdir.cleanup()
+
+
 def test_cache_disabled():
     """Test that tracking works without cache and cache field is not present"""
     tempdir = TemporaryDirectory()

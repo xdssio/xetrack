@@ -93,6 +93,7 @@ class Tracker:
         self.jsonl_path = jsonl
         self.cache_path = cache
         self.cache = self._init_cache(cache)
+        self._warned_unhashable_types = set()  # Track unhashable types to warn only once
         self.logger = self._build_logger(logs_stdout, logs_path, logs_file_format, jsonl)
         self.warnings = warnings and self.logger is not None
         self._columns = set()
@@ -189,9 +190,51 @@ class Tracker:
                 ) from e
         return None
 
+    def _make_hashable(self, value: Any, context: str = "") -> Any:
+        """
+        Convert a value to a hashable representation for cache keys.
+
+        For primitives: use as-is
+        For hashable objects: use hash()
+        For unhashable objects: warn once per type and use id() (won't work across runs)
+
+        :param value: The value to make hashable
+        :param context: Context string for warning messages (e.g., "arg[0]", "kwarg 'model'")
+        :return: Hashable representation of the value
+        """
+        # Handle None explicitly
+        if value is None:
+            return None
+
+        # Primitives can be used as-is
+        if self._is_primitive(value):
+            return value
+
+        # Try to hash the object
+        try:
+            return hash(value)
+        except TypeError:
+            # Object is unhashable - warn once per type
+            type_name = type(value).__name__
+            if type_name not in self._warned_unhashable_types:
+                self._warned_unhashable_types.add(type_name)
+                if self.warnings:
+                    self.logger.warning(
+                        f"Unhashable type '{type_name}' encountered in cache key{' (' + context + ')' if context else ''}. "
+                        f"Using object id() - cache may not persist across runs for this type."
+                    )
+            # Fallback: use id() which will be different across runs
+            # This means cache won't work across runs for unhashable objects
+            return f"unhashable_{type_name}_{id(value)}"
+
     def _generate_cache_key(self, func: typing.Callable, args: List[Any], kwargs: Dict[str, Any], params: Dict[str, Any]) -> tuple:
         """
         Generate a cache key from function name, args, kwargs, and tracker params.
+
+        Handles primitives, hashable objects, and unhashable objects gracefully.
+        For primitives: use as-is
+        For hashable objects (custom classes with __hash__): use hash()
+        For unhashable objects: warn and use id() (won't persist across runs)
 
         :param func: The function being cached
         :param args: Positional arguments
@@ -202,12 +245,12 @@ class Tracker:
         # Create a deterministic representation of the function call
         func_name = f"{func.__module__}.{func.__name__}" if hasattr(func, '__module__') else func.__name__
 
-        # Convert to tuples for hashability
-        args_tuple = tuple(args)
-        kwargs_tuple = tuple(sorted(kwargs.items()))
-        params_tuple = tuple(sorted(params.items()))
+        # Convert to hashable representations
+        args_hashable = tuple(self._make_hashable(arg, f"arg[{i}]") for i, arg in enumerate(args))
+        kwargs_hashable = tuple(sorted((k, self._make_hashable(v, f"kwarg '{k}'")) for k, v in kwargs.items()))
+        params_hashable = tuple(sorted((k, self._make_hashable(v, f"param '{k}'")) for k, v in params.items()))
 
-        return (func_name, args_tuple, kwargs_tuple, params_tuple)
+        return (func_name, args_hashable, kwargs_hashable, params_hashable)
 
     def _build_logger(
         self,
