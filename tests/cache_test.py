@@ -255,7 +255,7 @@ def test_cache_with_hashable_objects():
 
 
 def test_cache_with_unhashable_objects():
-    """Test that unhashable objects use id() and don't persist across runs"""
+    """Test that unhashable objects skip caching entirely"""
     tempdir = TemporaryDirectory()
     db_path = os.path.join(tempdir.name, "test.db")
     cache_path = os.path.join(tempdir.name, "cache")
@@ -265,19 +265,18 @@ def test_cache_with_unhashable_objects():
     def process_list(items: list) -> int:
         return sum(items)
 
-    # First call with a list (unhashable)
+    # First call with a list (unhashable) - caching skipped
     result1 = tracker.track(process_list, args=[[1, 2, 3]])
     assert result1 == 6
 
-    # Second call with same list values - won't hit cache (different id)
+    # Second call with same list values - caching still skipped (unhashable)
     result2 = tracker.track(process_list, args=[[1, 2, 3]])
     assert result2 == 6
 
-    # Both should be computed (unhashable objects use id())
+    # Both should be computed and cache field should not be present (caching was skipped)
     df = Reader(db_path).to_df()
     assert len(df) == 2
-    assert df.iloc[0]['cache'] == ""
-    assert df.iloc[1]['cache'] == ""  # Not a cache hit because list ids differ
+    assert 'cache' not in df.columns  # Cache field not added when caching is skipped
 
     tempdir.cleanup()
 

@@ -274,7 +274,7 @@ Xetrack intelligently handles different types of arguments:
 
 - **Primitives** (int, float, str, bool, bytes): Used as-is in cache keys
 - **Hashable objects** (custom classes with `__hash__`): Uses `hash()` for consistent keys across runs
-- **Unhashable objects** (list, dict, sets): Uses `id()` - cache won't persist across runs (warning issued once per type)
+- **Unhashable objects** (list, dict, sets): **Caching skipped entirely** for that call (warning issued once per type)
 
 ```python
 # Hashable custom objects work great
@@ -289,12 +289,23 @@ class Config:
 # Cache hits work across different object instances with same hash
 config1 = Config("production")
 config2 = Config("production")
-tracker.track(process, args=[config1])  # Computed
+tracker.track(process, args=[config1])  # Computed, cached
 tracker.track(process, args=[config2])  # Cache hit! (same hash)
 
-# Unhashable objects use id() - won't cache across runs
-tracker.track(process, args=[[1, 2, 3]])  # Computed
-tracker.track(process, args=[[1, 2, 3]])  # Computed again (different list id)
+# Unhashable objects skip caching entirely
+tracker.track(process, args=[[1, 2, 3]])  # Computed, NOT cached (warning issued)
+tracker.track(process, args=[[1, 2, 3]])  # Computed again, still NOT cached
+
+# Make objects hashable to enable caching
+class HashableList:
+    def __init__(self, items):
+        self.items = tuple(items)  # Use tuple for hashability
+    def __hash__(self):
+        return hash(self.items)
+    def __eq__(self, other):
+        return isinstance(other, HashableList) and self.items == other.items
+
+tracker.track(process, args=[HashableList([1, 2, 3])])  # ✅ Cached!
 ```
 
 
