@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-01-26
+
+### Added
+- Disk-based caching with diskcache library as optional dependency
+- `cache` parameter to Tracker for transparent result caching
+- Intelligent cache key generation based on function + args + kwargs + params
+- Automatic handling of hashable and unhashable objects in cache keys
+- Lineage tracking via cache field (empty = computed, track_id = cache hit)
+- `Reader.read_cache()` method to read specific cache entries
+- `Reader.scan_cache()` method to iterate over all cached entries
+- Comprehensive cache tests covering basic usage, kwargs, exceptions, hashable/unhashable objects
+- Full documentation in README with examples and use cases
+
+### Changed
+- Cache skips unhashable objects entirely with warning (warnings can be disabled)
+- Cache stores dict with `result` and `cache` (track_id) for lineage tracking
+
+## [0.4.6] - 2026-01-26
+
 ### Added
 - GitHub Actions CI workflow for automated testing
 - CONTRIBUTING.md with comprehensive development guidelines
