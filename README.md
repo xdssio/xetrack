@@ -243,10 +243,12 @@ You can inspect cached values without re-running functions. Cache stores dicts w
 from xetrack import Reader
 
 # Read specific cached value by key
+# Note: _generate_cache_key is a private method for advanced usage
 cache_key = tracker._generate_cache_key(expensive_computation, [2, 10], {}, {})
-cached_data = Reader.read_cache('cache_dir', cache_key)
-print(f"Result: {cached_data['result']}, Original execution: {cached_data['cache']}")
-# Result: 1024, Original execution: abc123
+if cache_key is not None:  # Will be None if any arg is unhashable
+    cached_data = Reader.read_cache('cache_dir', cache_key)
+    print(f"Result: {cached_data['result']}, Original execution: {cached_data['cache']}")
+    # Result: 1024, Original execution: abc123
 
 # Scan all cached entries
 for key, cached_data in Reader.scan_cache('cache_dir'):
