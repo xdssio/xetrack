@@ -249,3 +249,58 @@ class Reader:
         """
         reader = cls(db, engine=engine, table=table)
         return reader.to_df(track_id=track_id, head=head, tail=tail)
+
+    @classmethod
+    def read_cache(cls, cache: str, key: str) -> Any:
+        """
+        Read a specific value from the cache by key.
+
+        Args:
+            cache: Path to cache directory
+            key: Cache key to retrieve
+
+        Returns:
+            Dict with "result" and "cache" keys if found, None otherwise
+
+        Example:
+            >>> cached_data = Reader.read_cache("cache_dir", "my_module.my_function:a1b2c3d4")
+            >>> print(f"Result: {cached_data['result']}, From: {cached_data['cache']}")
+            Result: 42, From: abc123
+        """
+        try:
+            from diskcache import Cache
+        except ImportError as e:
+            raise ImportError(
+                "diskcache is not installed. Please install it using `pip install xetrack[cache]` or `pip install diskcache`"
+            ) from e
+
+        cache_obj = Cache(cache)
+        return cache_obj.get(key)
+
+    @classmethod
+    def scan_cache(cls, cache: str):
+        """
+        Iterate over all cached key-value pairs.
+
+        Args:
+            cache: Path to cache directory
+
+        Yields:
+            Tuples of (key, cached_data) where cached_data is a dict with "result" and "cache" keys
+
+        Example:
+            >>> for key, cached_data in Reader.scan_cache("cache_dir"):
+            ...     print(f"{key}: result={cached_data['result']}, from={cached_data['cache']}")
+            my_module.my_function:a1b2c3d4: result=42, from=abc123
+            my_module.other_function:e5f6g7h8: result="hello", from=def456
+        """
+        try:
+            from diskcache import Cache
+        except ImportError as e:
+            raise ImportError(
+                "diskcache is not installed. Please install it using `pip install xetrack[cache]` or `pip install diskcache`"
+            ) from e
+
+        cache_obj = Cache(cache)
+        for key in cache_obj.iterkeys():
+            yield key, cache_obj[key]

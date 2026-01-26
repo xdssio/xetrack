@@ -59,6 +59,7 @@ You create a "Tracker", and let it track benchmark results, model training and i
 pip install xetrack
 pip install xetrack[duckdb] # to use duckdb as engine
 pip install xetrack[assets] # to be able to use the assets manager to save objects
+pip install xetrack[cache] # to enable function result caching
 ```
 
 ## Quickstart
@@ -176,6 +177,137 @@ import cloudpickle
 with open("model.cloudpickle", 'rb') as f:
     model = cloudpickle.loads(f.read())
 # LogisticRegression()
+```
+
+## Function Result Caching
+
+Xetrack provides transparent disk-based caching for expensive function results using [diskcache](https://grantjenks.com/docs/diskcache/). When enabled, results are automatically cached based on function name, arguments, and keyword arguments.
+
+### Installation
+
+```bash
+pip install xetrack[cache]
+```
+
+### Basic Usage
+
+Simply provide a `cache` parameter with a directory path to enable automatic caching:
+
+```python
+from xetrack import Tracker
+
+tracker = Tracker(db='track.db', cache='cache_dir')
+
+def expensive_computation(x: int, y: int) -> int:
+    """Simulate expensive computation"""
+    return x ** y
+
+# First call - executes function
+result1 = tracker.track(expensive_computation, args=[2, 10])  # Computes 2^10 = 1024
+
+# Second call with same args - returns cached result instantly
+result2 = tracker.track(expensive_computation, args=[2, 10])  # Cache hit!
+
+# Different args - executes function again
+result3 = tracker.track(expensive_computation, args=[3, 10])  # Computes 3^10 = 59049
+
+# Tracker params also affect cache keys
+result4 = tracker.track(expensive_computation, args=[2, 10], params={"model": "v2"})  # Computes (different params)
+result5 = tracker.track(expensive_computation, args=[2, 10], params={"model": "v2"})  # Cache hit!
+```
+
+### Cache Observability & Lineage Tracking
+
+Cache behavior is tracked in the database with the `cache` field for full lineage tracking:
+
+```python
+from xetrack import Reader
+
+df = Reader(db='track.db').to_df()
+print(df[['function_name', 'function_time', 'cache', 'track_id']])
+#   function_name           function_time  cache           track_id
+# 0 expensive_computation   2.345          ""              abc123      # Computed (cache miss)
+# 1 expensive_computation   0.000          "abc123"        def456      # Cache hit - traces back to abc123
+# 2 expensive_computation   2.891          ""              ghi789      # Different args (computed)
+```
+
+The `cache` field provides lineage:
+- **Empty string ("")**: Result was computed (cache miss or no cache)
+- **track_id value**: Result came from cache (cache hit), references the original execution's track_id
+
+### Reading Cache Directly
+
+You can inspect cached values without re-running functions. Cache stores dicts with "result" and "cache" keys:
+
+```python
+from xetrack import Reader
+
+# Read specific cached value by key
+# Note: _generate_cache_key is a private method for advanced usage
+cache_key = tracker._generate_cache_key(expensive_computation, [2, 10], {}, {})
+if cache_key is not None:  # Will be None if any arg is unhashable
+    cached_data = Reader.read_cache('cache_dir', cache_key)
+    print(f"Result: {cached_data['result']}, Original execution: {cached_data['cache']}")
+    # Result: 1024, Original execution: abc123
+
+# Scan all cached entries
+for key, cached_data in Reader.scan_cache('cache_dir'):
+    print(f"{key}: result={cached_data['result']}, from={cached_data['cache']}")
+```
+
+### Use Cases
+
+- **ML Model Inference**: Cache predictions for repeated inputs
+- **Data Processing**: Cache expensive transformations or aggregations
+- **API Calls**: Cache external API responses (with appropriate TTL considerations)
+- **Scientific Computing**: Cache results of long-running simulations
+
+### Important Notes
+
+- **Cache keys** are generated from tuples of (function name, args, kwargs, **tracker params**)
+- Different tracker params create separate cache entries (e.g., different model versions)
+- Exceptions are **not cached** - failed calls will retry on next invocation
+- Cache is persistent across Python sessions
+- Lineage tracking: the `cache` field links cached results to their original execution via track_id
+
+### Handling Objects in Cache Keys
+
+Xetrack intelligently handles different types of arguments:
+
+- **Primitives** (int, float, str, bool, bytes): Used as-is in cache keys
+- **Hashable objects** (custom classes with `__hash__`): Uses `hash()` for consistent keys across runs
+- **Unhashable objects** (list, dict, sets): **Caching skipped entirely** for that call (warning issued once per type)
+
+```python
+# Hashable custom objects work great
+class Config:
+    def __init__(self, value):
+        self.value = value
+    def __hash__(self):
+        return hash(self.value)
+    def __eq__(self, other):
+        return isinstance(other, Config) and self.value == other.value
+
+# Cache hits work across different object instances with same hash
+config1 = Config("production")
+config2 = Config("production")
+tracker.track(process, args=[config1])  # Computed, cached
+tracker.track(process, args=[config2])  # Cache hit! (same hash)
+
+# Unhashable objects skip caching entirely
+tracker.track(process, args=[[1, 2, 3]])  # Computed, NOT cached (warning issued)
+tracker.track(process, args=[[1, 2, 3]])  # Computed again, still NOT cached
+
+# Make objects hashable to enable caching
+class HashableList:
+    def __init__(self, items):
+        self.items = tuple(items)  # Use tuple for hashability
+    def __hash__(self):
+        return hash(self.items)
+    def __eq__(self, other):
+        return isinstance(other, HashableList) and self.items == other.items
+
+tracker.track(process, args=[HashableList([1, 2, 3])])  # ✅ Cached!
 ```
 
 

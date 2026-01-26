@@ -49,6 +49,7 @@ class Tracker:
         logs_file_format: Optional[str] = None,
         logs_stdout: bool = False,
         jsonl: Optional[str] = None,
+        cache: Optional[str] = None,
         compress: bool = False,
         warnings: bool = True,
         git_root: Optional[str] = None,
@@ -71,6 +72,7 @@ class Tracker:
         :param logs_file_format: The format of the logs file. Default is "{time:YYYY-MM-DD}.log" (daily). Only apply if logs_path is given.
         :param logs_stdout: If True, logs will be printed to stdout. Default is False.
         :param jsonl: Path to JSONL file for structured logging. If given, each log entry will be written as JSON.
+        :param cache: Path to cache directory for function result caching. If given, tracker.track() will automatically cache function results.
         :param compress: If True, the database will be compressed. Default is False.
         :param warnings: If True, warnings will be printed. Default is True.
         :param git_root: Directory to use for git operations. If provided, git commit hash will be tracked.
@@ -89,6 +91,10 @@ class Tracker:
         self.params = params
         self.track_id = track_id or self.generate_track_id()
         self.jsonl_path = jsonl
+        self.cache_path = cache
+        self.cache = self._init_cache(cache)
+        self._warned_unhashable_types = set()  # Track unhashable types to warn only once
+        self._INVALID_CACHE_VALUE = object()  # Sentinel for unhashable values
         self.logger = self._build_logger(logs_stdout, logs_path, logs_file_format, jsonl)
         self.warnings = warnings and self.logger is not None
         self._columns = set()
@@ -167,6 +173,85 @@ class Tracker:
         
     def remove_asset(self, hash_value: str, column: Optional[str], remove_keys: bool = True) -> bool:
         return self.engine.remove_asset(hash_value, column, remove_keys)
+
+    def _init_cache(self, cache_path: Optional[str]):
+        """
+        Initialize cache if cache_path is provided.
+
+        :param cache_path: Path to cache directory
+        :return: diskcache.Cache instance if caching is enabled, None otherwise
+        """
+        if cache_path:
+            try:
+                from diskcache import Cache
+                return Cache(cache_path)
+            except ImportError as e:
+                raise ImportError(
+                    "diskcache is not installed. Please install it using `pip install xetrack[cache]` or `pip install diskcache`"
+                ) from e
+        return None
+
+    def _make_hashable(self, value: Any, context: str = "") -> Any:
+        """
+        Convert a value to a hashable representation for cache keys.
+
+        For primitives: use as-is
+        For hashable objects: use hash()
+        For unhashable objects: return _INVALID_CACHE_VALUE sentinel
+
+        :param value: The value to make hashable
+        :param context: Context for warning message (e.g., "arg[0]", "kwarg 'x'")
+        :return: Hashable representation or _INVALID_CACHE_VALUE if unhashable
+        """
+        # Handle None explicitly
+        if value is None:
+            return None
+
+        # Primitives can be used as-is
+        if self._is_primitive(value):
+            return value
+
+        # Try to hash the object
+        try:
+            return hash(value)
+        except TypeError:
+            # Object is unhashable - warn once per type and return sentinel
+            type_name = type(value).__name__
+            if type_name not in self._warned_unhashable_types:
+                self._warned_unhashable_types.add(type_name)
+                if self.warnings:
+                    self.logger.warning(
+                        f"Unhashable type '{type_name}'{' in ' + context if context else ''}. "
+                        f"Skipping cache for this call. Make objects hashable (implement __hash__) to enable caching."
+                    )
+            return self._INVALID_CACHE_VALUE
+
+    def _generate_cache_key(self, func: typing.Callable, args: List[Any], kwargs: Dict[str, Any], params: Dict[str, Any]) -> typing.Optional[tuple]:
+        """
+        Generate a cache key from function name, args, kwargs, and tracker params.
+
+        Returns None if any value is unhashable (cannot be cached).
+
+        :param func: The function being cached
+        :param args: Positional arguments
+        :param kwargs: Keyword arguments
+        :param params: Tracker parameters
+        :return: Cache key tuple or None if any value is unhashable
+        """
+        # Create a deterministic representation of the function call
+        func_name = f"{func.__module__}.{func.__name__}" if hasattr(func, '__module__') else func.__name__
+
+        # Convert to hashable representations
+        args_hashable = tuple(self._make_hashable(arg, f"arg[{i}]") for i, arg in enumerate(args))
+        kwargs_hashable = tuple(sorted((k, self._make_hashable(v, f"kwarg '{k}'")) for k, v in kwargs.items()))
+        params_hashable = tuple(sorted((k, self._make_hashable(v, f"param '{k}'")) for k, v in params.items()))
+
+        # Check if any value is invalid (unhashable)
+        all_values = args_hashable + tuple(v for _, v in kwargs_hashable) + tuple(v for _, v in params_hashable)
+        if self._INVALID_CACHE_VALUE in all_values:
+            return None  # Cannot cache this call
+
+        return (func_name, args_hashable, kwargs_hashable, params_hashable)
 
     def _build_logger(
         self,
@@ -438,6 +523,8 @@ class Tracker:
         """
         Executes a function and logs the execution data.
 
+        If cache is enabled, checks cache before executing function and stores result after.
+
         Args:
             func (callable): The function to be executed.
             params (dict, optional): Additional parameters to log along with the execution data. Defaults to None.
@@ -454,6 +541,26 @@ class Tracker:
             args = []
         if kwargs is None:
             kwargs = {}
+
+        # Check cache if enabled (cache_key will be None if any value is unhashable)
+        cache_key = None
+        if self.cache is not None:
+            cache_key = self._generate_cache_key(func, args, kwargs, params)
+            if cache_key is not None and cache_key in self.cache:
+                cached_data = self.cache[cache_key]
+                # Log cache hit
+                data = {
+                    "function_name": func.__name__,
+                    "args": str(list(args)),
+                    "kwargs": str(kwargs),
+                    "cache": cached_data["cache"],  # Track lineage - non-empty means cache hit
+                    "error": "",
+                    "function_time": 0.0,
+                }
+                data.update(params)
+                self.log(data)
+                return cached_data["result"]
+
         if self.log_network_params:
             net_io_before = psutil.net_io_counters()
         if self.log_system_params:
@@ -469,15 +576,25 @@ class Tracker:
             stats_process.start()
         data, result, exception = self._run_func(func, *args, **kwargs)
         data.update(params)
+        # Add cache field for lineage tracking (only if all values were cacheable)
+        if cache_key is not None:
+            data["cache"] = ""  # Empty string indicates not from cache (computed)
         if self.log_system_params:
             stop_event.set()  # type: ignore
             data.update(stats.get_average_stats())  # type: ignore
         if self.log_network_params:
             bytes_sent, bytes_recv = self._to_send_recv(
                 net_io_before, psutil.net_io_counters() # type: ignore
-            )  
+            )
             data.update({"bytes_sent": bytes_sent, "bytes_recv": bytes_recv})
-        self.log(data)
+        logged_data = self.log(data)
+
+        # Store in cache if all values were cacheable and there was no exception
+        # Store dict with result and cache (track_id) for lineage tracking
+        if cache_key is not None and exception is None:
+            track_id = logged_data.get(SCHEMA_PARAMS.TRACK_ID, self.track_id)
+            self.cache[cache_key] = {"result": result, "cache": track_id}
+
         if exception is not None and self.raise_on_error:
             raise exception
         return result
