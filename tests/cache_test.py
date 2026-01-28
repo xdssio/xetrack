@@ -304,3 +304,88 @@ def test_cache_disabled():
     assert 'cache' not in df.columns
 
     tempdir.cleanup()
+
+
+def test_cache_with_dataclass():
+    """Test that dataclass inputs work with caching"""
+    from dataclasses import dataclass
+    
+    tempdir = TemporaryDirectory()
+    db_path = os.path.join(tempdir.name, "test.db")
+    cache_path = os.path.join(tempdir.name, "cache")
+
+    tracker = Tracker(db=db_path, cache=cache_path)
+
+    @dataclass(frozen=True)  # frozen=True makes it hashable
+    class Config:
+        learning_rate: float
+        batch_size: int
+        model_name: str
+
+    def train_model(config: Config) -> float:
+        """Simulate training with config"""
+        return config.learning_rate * config.batch_size
+
+    # Create two Config objects with same values
+    config1 = Config(learning_rate=0.01, batch_size=32, model_name="bert")
+    config2 = Config(learning_rate=0.01, batch_size=32, model_name="bert")
+
+    # First call - should execute function
+    result1 = tracker.track(train_model, args=[config1])
+    assert result1 == 0.32  # 0.01 * 32
+
+    # Second call with different object but same hash - should hit cache
+    result2 = tracker.track(train_model, args=[config2])
+    assert result2 == 0.32
+
+    # Verify cache hit
+    df = Reader(db_path).to_df()
+    assert len(df) == 2
+    assert df.iloc[0]['cache'] == ""  # First call computed
+    assert df.iloc[1]['cache'] == df.iloc[0]['track_id']  # Second call hit cache
+
+    # Different config should compute again
+    config3 = Config(learning_rate=0.02, batch_size=32, model_name="bert")
+    result3 = tracker.track(train_model, args=[config3])
+    assert result3 == 0.64  # 0.02 * 32
+
+    df = Reader(db_path).to_df()
+    assert len(df) == 3
+    assert df.iloc[2]['cache'] == ""  # New config computed
+
+    tempdir.cleanup()
+
+
+def test_cache_with_non_frozen_dataclass():
+    """Test that non-frozen dataclass inputs skip caching"""
+    from dataclasses import dataclass
+    
+    tempdir = TemporaryDirectory()
+    db_path = os.path.join(tempdir.name, "test.db")
+    cache_path = os.path.join(tempdir.name, "cache")
+
+    tracker = Tracker(db=db_path, cache=cache_path, warnings=False)
+
+    @dataclass  # Not frozen - not hashable
+    class Config:
+        learning_rate: float
+        batch_size: int
+
+    def compute(config: Config) -> float:
+        return config.learning_rate * config.batch_size
+
+    config = Config(learning_rate=0.01, batch_size=32)
+
+    # Both calls should execute (no caching with unhashable dataclass)
+    result1 = tracker.track(compute, args=[config])
+    assert result1 == 0.32
+
+    result2 = tracker.track(compute, args=[config])
+    assert result2 == 0.32
+
+    # Cache field should not be present (caching was skipped)
+    df = Reader(db_path).to_df()
+    assert len(df) == 2
+    assert 'cache' not in df.columns
+
+    tempdir.cleanup()

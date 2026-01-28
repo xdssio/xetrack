@@ -310,6 +310,46 @@ class HashableList:
 tracker.track(process, args=[HashableList([1, 2, 3])])  # ✅ Cached!
 ```
 
+### Using Frozen Dataclasses for Complex Configurations
+
+**Recommended Pattern**: When your function has many parameters or complex configurations, use frozen dataclasses to enable caching. This is especially useful for ML experiments with multiple hyperparameters.
+
+```python
+from dataclasses import dataclass
+
+# ✅ RECOMMENDED: frozen=True makes dataclass hashable automatically, slots efficient in memory
+@dataclass(frozen=True, slots=True)
+class TrainingConfig:
+    learning_rate: float
+    batch_size: int
+    epochs: int
+    model_name: str
+    optimizer: str = "adam"
+
+def train_model(config: TrainingConfig) -> dict:
+    """Complex training function with many parameters"""
+    # ... training logic ...
+    return {"accuracy": 0.95, "loss": 0.05}
+
+# Caching works seamlessly with frozen dataclasses
+config1 = TrainingConfig(learning_rate=0.001, batch_size=32, epochs=10, model_name="bert")
+result1 = tracker.track(train_model, args=[config1])  # Computed, cached
+
+config2 = TrainingConfig(learning_rate=0.001, batch_size=32, epochs=10, model_name="bert")
+result2 = tracker.track(train_model, args=[config2])  # Cache hit! (identical config)
+
+# Different config computes again
+config3 = TrainingConfig(learning_rate=0.002, batch_size=32, epochs=10, model_name="bert")
+result3 = tracker.track(train_model, args=[config3])  # Computed (different learning_rate)
+```
+
+**Benefits:**
+- Clean, readable function signatures (one config object instead of many parameters)
+- Type safety with automatic validation
+- Automatic hashability with `frozen=True` 
+- Cache works across different object instances with identical values
+- Easier to version and serialize configurations
+
 
 ### Tips and Tricks
 
