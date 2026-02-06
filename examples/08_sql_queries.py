@@ -70,7 +70,7 @@ def main():
         # Create tracker with DuckDB (separate database for demo purposes)
         tracker_duckdb = Tracker("examples_data/sql_demo_duckdb.db", engine="duckdb")
 
-        # Copy some data to DuckDB database
+        # Generate and log random data to DuckDB
         for i in range(15):
             tracker_duckdb.log(
                 {
