@@ -529,7 +529,7 @@ On great use-case is **model monitoring**.
 
 ```python
 $ Tracker(db=Tracker.IN_MEMORY, logs_path='logs',logs_stdout=True).log({"accuracy":0.9})
-2023-12-14 21:46:55.290 | TRACKING | xetrack_logging:log:69!📁!{"a": 1, "b": 2, "timestamp": "2023-12-14 21:46:55.290098", "track_id": "marvellous-stork-4885"}
+2023-12-14 21:46:55.290 | TRACKING | xetrack.logging:log:176!📁!{"accuracy": 0.9, "timestamp": "2023-12-14 21:46:55.290098", "track_id": "marvellous-stork-4885"}
 
 $ Reader.read_logs(path='logs')
    accuracy                   timestamp                track_id

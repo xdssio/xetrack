@@ -80,18 +80,18 @@ def main():
     
     # Example 4: Asset deduplication
     print("\n4. Testing asset deduplication:")
-    # Train identical model
-    lr3 = LogisticRegression(max_iter=200).fit(X_train, y_train)
+    # Reuse the same model object - demonstrates true deduplication
     tracker.log({
         'model': 'logistic_regression_v3',
-        'accuracy': float(lr3.score(X_test, y_test)),
-        'lr_model': lr3
+        'accuracy': float(lr.score(X_test, y_test)),
+        'lr_model': lr  # Reuse the exact same model object
     })
     
     hash3 = tracker.latest['lr_model']
     print(f"   New model hash: {hash3}")
     print(f"   Same as first hash: {hash3 == model_hash}")
     print(f"   ✓ Deduplication prevents storing identical models multiple times")
+    print(f"   Note: Retraining models may produce different weights/hashes even with same params")
     
     # Example 5: View all tracked experiments
     print("\n5. All tracked experiments:")

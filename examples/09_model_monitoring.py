@@ -74,24 +74,58 @@ def main():
     # Example 2: Read logs for analysis
     print("\n2. Analyzing monitoring logs:")
     import os
-    if os.path.exists('examples_data/monitoring/inference.jsonl'):
-        df = Reader.read_jsonl('examples_data/monitoring/inference.jsonl')
-        
-        print(f"   Total requests logged: {len(df)}")
-        print(f"\n   Inference time statistics:")
-        print(f"     Mean: {df['inference_time'].mean():.4f}s")
-        print(f"     P50: {df['inference_time'].median():.4f}s")
-        print(f"     P95: {df['inference_time'].quantile(0.95):.4f}s")
-        print(f"     Max: {df['inference_time'].max():.4f}s")
-        
-        print(f"\n   Confidence statistics:")
-        print(f"     Mean: {df['confidence'].mean():.4f}")
-        print(f"     Min: {df['confidence'].min():.4f}")
-        
-        print(f"\n   Prediction distribution:")
-        pred_dist = df['prediction'].value_counts()
-        for pred, count in pred_dist.items():
-            print(f"     {pred}: {count} ({count/len(df)*100:.1f}%)")
+
+    jsonl_file = "examples_data/monitoring/inference.jsonl"
+    if os.path.exists(jsonl_file):
+        # Wait for file to stabilize (async logger may still be writing)
+        max_retries = 10
+        stable_checks = 2
+        sleep_interval = 0.1
+
+        prev_size = -1
+        stable_count = 0
+        for attempt in range(max_retries):
+            try:
+                curr_size = os.path.getsize(jsonl_file)
+                if curr_size == prev_size and prev_size > 0:
+                    stable_count += 1
+                    if stable_count >= stable_checks:
+                        break  # File size stable, ready to read
+                else:
+                    stable_count = 0
+                prev_size = curr_size
+                time.sleep(sleep_interval)
+            except OSError:
+                time.sleep(sleep_interval)
+
+        # Read with retry in case of transient errors
+        df = None
+        for read_attempt in range(3):
+            try:
+                df = Reader.read_jsonl(jsonl_file)
+                break
+            except (ValueError, IOError) as e:
+                if read_attempt < 2:
+                    time.sleep(sleep_interval)
+                else:
+                    raise
+
+        if df is not None:
+            print(f"   Total requests logged: {len(df)}")
+            print(f"\n   Inference time statistics:")
+            print(f"     Mean: {df['inference_time'].mean():.4f}s")
+            print(f"     P50: {df['inference_time'].median():.4f}s")
+            print(f"     P95: {df['inference_time'].quantile(0.95):.4f}s")
+            print(f"     Max: {df['inference_time'].max():.4f}s")
+
+            print(f"\n   Confidence statistics:")
+            print(f"     Mean: {df['confidence'].mean():.4f}")
+            print(f"     Min: {df['confidence'].min():.4f}")
+
+            print(f"\n   Prediction distribution:")
+            pred_dist = df["prediction"].value_counts()
+            for pred, count in pred_dist.items():
+                print(f"     {pred}: {count} ({count / len(df) * 100:.1f}%)")
     
     # Example 3: Drift detection setup
     print("\n3. Setting up for drift detection:")
