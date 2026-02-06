@@ -306,9 +306,6 @@ class SqliteEngine(Engine[sqlite3.Connection]):
         
         query = f"CREATE TABLE IF NOT EXISTS {quoted_table_name} ({', '.join(column_defs)})"
         self.execute(query)
-        
-        query = f"CREATE TABLE IF NOT EXISTS {quoted_table_name} ({', '.join(column_defs)})"
-        self.execute(query)
 
     @property
     def columns(self) -> set[str]:

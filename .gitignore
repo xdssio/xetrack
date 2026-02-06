@@ -421,3 +421,7 @@ CLAUDE.md
 tmp/
 WARP.md
 CLAUDE.md
+
+# Generated example data and test databases
+examples_data/
+experiments_db

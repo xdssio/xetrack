@@ -20,7 +20,7 @@ def main():
     
     # Generate data with SQLite
     print("\n1. Setting up data (SQLite engine):")
-    tracker_sqlite = Tracker('examples_data/sql_demo.db', engine='sqlite')
+    tracker_sqlite = Tracker("examples_data/sql_demo_sqlite.db", engine="sqlite")
     
     models = ['resnet', 'vgg', 'efficientnet']
     for i in range(15):
@@ -67,8 +67,20 @@ def main():
     # Example 3: DuckDB for analytics
     print("\n3. Using DuckDB engine for analytics:")
     try:
-        # Create tracker with DuckDB
-        tracker_duckdb = Tracker('examples_data/sql_demo.db', engine='duckdb')
+        # Create tracker with DuckDB (separate database for demo purposes)
+        tracker_duckdb = Tracker("examples_data/sql_demo_duckdb.db", engine="duckdb")
+
+        # Copy some data to DuckDB database
+        for i in range(15):
+            tracker_duckdb.log(
+                {
+                    "model": random.choice(models),
+                    "accuracy": random.uniform(0.7, 0.95),
+                    "loss": random.uniform(0.05, 0.3),
+                    "epoch": random.randint(1, 100),
+                    "lr": random.choice([0.001, 0.01, 0.1]),
+                }
+            )
         
         # DuckDB queries
         query_duckdb = """
@@ -108,7 +120,7 @@ def main():
                 current_model = row[0]
                 print(f"     {current_model}:")
             print(f"       #{row[2]}: {row[1]:.4f}")
-        
+
     except ImportError:
         print("   ⚠ DuckDB not installed")
         print("     Install with: pip install xetrack[duckdb]")
@@ -129,7 +141,7 @@ def main():
     
     # Example 5: Using Reader for filtering
     print("\n5. Filtering with Reader:")
-    reader = Reader('examples_data/sql_demo.db')
+    reader = Reader("examples_data/sql_demo_sqlite.db")
     
     # Reader supports head/tail/track_id filtering
     df_all = reader.to_df()
@@ -144,7 +156,8 @@ def main():
     
     print("\n" + "=" * 60)
     print("✓ SQL queries example complete!")
-    print("  Database: examples_data/sql_demo.db")
+    print("  SQLite database: examples_data/sql_demo_sqlite.db")
+    print("  DuckDB database: examples_data/sql_demo_duckdb.db")
     print("=" * 60)
 
 

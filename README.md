@@ -223,8 +223,8 @@ result = tracker.track(
     ]
 )
 
-# Result includes: model_cfg.model_type, model_cfg.num_layers, 
-#                  data_cfg.dataset, data_cfg.batch_size, score
+# Result includes: model_cfg_model_type, model_cfg_num_layers, 
+#                  data_cfg_dataset, data_cfg_batch_size, score
 ```
 
 **Also works with Pydantic BaseModel:**
