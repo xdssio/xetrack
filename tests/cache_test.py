@@ -6,7 +6,7 @@ import os
 def test_cache_basic():
     """Test basic cache functionality"""
     tempdir = TemporaryDirectory()
-    db_path = os.path.join(tempdir.name, "test.db")
+    db_path = os.path.join(tempdir.name, "test_db")
     cache_path = os.path.join(tempdir.name, "cache")
 
     # Create tracker with cache
@@ -35,7 +35,7 @@ def test_cache_basic():
 def test_cache_with_kwargs():
     """Test cache with keyword arguments"""
     tempdir = TemporaryDirectory()
-    db_path = os.path.join(tempdir.name, "test.db")
+    db_path = os.path.join(tempdir.name, "test_db")
     cache_path = os.path.join(tempdir.name, "cache")
 
     tracker = Tracker(db=db_path, cache=cache_path)
@@ -59,7 +59,7 @@ def test_cache_with_kwargs():
 def test_cache_hit_logging():
     """Test that cache field tracks lineage (empty = computed, track_id = cache hit)"""
     tempdir = TemporaryDirectory()
-    db_path = os.path.join(tempdir.name, "test.db")
+    db_path = os.path.join(tempdir.name, "test_db")
     cache_path = os.path.join(tempdir.name, "cache")
 
     tracker = Tracker(db=db_path, cache=cache_path)
@@ -89,7 +89,7 @@ def test_cache_hit_logging():
 def test_reader_read_cache():
     """Test Reader.read_cache() method"""
     tempdir = TemporaryDirectory()
-    db_path = os.path.join(tempdir.name, "test.db")
+    db_path = os.path.join(tempdir.name, "test_db")
     cache_path = os.path.join(tempdir.name, "cache")
 
     tracker = Tracker(db=db_path, cache=cache_path)
@@ -116,7 +116,7 @@ def test_reader_read_cache():
 def test_reader_scan_cache():
     """Test Reader.scan_cache() method"""
     tempdir = TemporaryDirectory()
-    db_path = os.path.join(tempdir.name, "test.db")
+    db_path = os.path.join(tempdir.name, "test_db")
     cache_path = os.path.join(tempdir.name, "cache")
 
     tracker = Tracker(db=db_path, cache=cache_path)
@@ -148,7 +148,7 @@ def test_reader_scan_cache():
 def test_cache_with_exception():
     """Test that exceptions are not cached"""
     tempdir = TemporaryDirectory()
-    db_path = os.path.join(tempdir.name, "test.db")
+    db_path = os.path.join(tempdir.name, "test_db")
     cache_path = os.path.join(tempdir.name, "cache")
 
     tracker = Tracker(db=db_path, cache=cache_path, raise_on_error=False)
@@ -179,7 +179,7 @@ def test_cache_with_exception():
 def test_cache_with_different_params():
     """Test that different tracker params create separate cache entries"""
     tempdir = TemporaryDirectory()
-    db_path = os.path.join(tempdir.name, "test.db")
+    db_path = os.path.join(tempdir.name, "test_db")
     cache_path = os.path.join(tempdir.name, "cache")
 
     tracker = Tracker(db=db_path, cache=cache_path)
@@ -213,7 +213,7 @@ def test_cache_with_different_params():
 def test_cache_with_hashable_objects():
     """Test that hashable custom objects work with caching"""
     tempdir = TemporaryDirectory()
-    db_path = os.path.join(tempdir.name, "test.db")
+    db_path = os.path.join(tempdir.name, "test_db")
     cache_path = os.path.join(tempdir.name, "cache")
 
     tracker = Tracker(db=db_path, cache=cache_path)
@@ -257,7 +257,7 @@ def test_cache_with_hashable_objects():
 def test_cache_with_unhashable_objects():
     """Test that unhashable objects skip caching entirely"""
     tempdir = TemporaryDirectory()
-    db_path = os.path.join(tempdir.name, "test.db")
+    db_path = os.path.join(tempdir.name, "test_db")
     cache_path = os.path.join(tempdir.name, "cache")
 
     tracker = Tracker(db=db_path, cache=cache_path, warnings=False)  # Disable warnings for cleaner test
@@ -284,7 +284,7 @@ def test_cache_with_unhashable_objects():
 def test_cache_disabled():
     """Test that tracking works without cache and cache field is not present"""
     tempdir = TemporaryDirectory()
-    db_path = os.path.join(tempdir.name, "test.db")
+    db_path = os.path.join(tempdir.name, "test_db")
 
     # Create tracker without cache
     tracker = Tracker(db=db_path)
@@ -311,7 +311,7 @@ def test_cache_with_dataclass():
     from dataclasses import dataclass
     
     tempdir = TemporaryDirectory()
-    db_path = os.path.join(tempdir.name, "test.db")
+    db_path = os.path.join(tempdir.name, "test_db")
     cache_path = os.path.join(tempdir.name, "cache")
 
     tracker = Tracker(db=db_path, cache=cache_path)
@@ -361,7 +361,7 @@ def test_cache_with_non_frozen_dataclass():
     from dataclasses import dataclass
     
     tempdir = TemporaryDirectory()
-    db_path = os.path.join(tempdir.name, "test.db")
+    db_path = os.path.join(tempdir.name, "test_db")
     cache_path = os.path.join(tempdir.name, "cache")
 
     tracker = Tracker(db=db_path, cache=cache_path, warnings=False)
