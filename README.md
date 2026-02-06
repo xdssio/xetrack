@@ -62,12 +62,28 @@ pip install xetrack[assets] # to be able to use the assets manager to save objec
 pip install xetrack[cache] # to enable function result caching
 ```
 
+## Examples
+
+**Complete examples for every feature** are available in the `examples/` directory:
+
+```bash
+# Run all examples
+python examples/run_all.py
+
+# Run individual examples
+python examples/01_quickstart.py
+python examples/02_track_functions.py
+# ... etc
+```
+
+See [`examples/README.md`](examples/README.md) for full documentation of all 9+ examples.
+
 ## Quickstart
 
 ```python
 from xetrack import Tracker
 
-tracker = Tracker('database.db', 
+tracker = Tracker('database_db', 
                   params={'model': 'resnet18'}
                   )
 tracker.log({"accuracy":0.9, "loss":0.1, "epoch":1}) # All you really need
@@ -85,8 +101,8 @@ tracker.to_df(all=True)  # retrieve all the runs as dataframe
 **Multiple experiment types**: Use different table names to organize different types of experiments in the same database.
 
 ```python
-model_tracker = Tracker('experiments.db', table='model_experiments')
-data_tracker = Tracker('experiments.db', table='data_experiments')
+model_tracker = Tracker('experiments_db', table='model_experiments')
+data_tracker = Tracker('experiments_db', table='data_experiments')
 ```
 
 **Params** are values which are added to every future row:
@@ -119,7 +135,7 @@ You can track any function.
 * The return value is logged before returned
 
 ```python
-tracker = Tracker('database.db', 
+tracker = Tracker('database_db', 
     log_system_params=True, 
     log_network_params=True, 
     measurement_interval=0.1)
@@ -144,6 +160,100 @@ tracker.latest
  'function_result': 6, 'name': 'foofoo', 'timestamp': '26-09-2023 12:21:02.200245', 'track_id': '398c985a-dc15-42da-88aa-6ac6cbf55794'}
 ```
 
+### Automatic Dataclass and Pydantic BaseModel Unpacking
+
+**NEW**: When tracking functions, xetrack automatically unpacks frozen dataclasses and Pydantic BaseModels into individual tracked fields with dot-notation prefixes.
+
+This is especially useful for ML experiments where you have complex configuration objects:
+
+```python
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class TrainingConfig:
+    learning_rate: float
+    batch_size: int
+    epochs: int
+    optimizer: str = "adam"
+
+@tracker.wrap()
+def train_model(config: TrainingConfig):
+    # Your training logic here
+    return {"accuracy": 0.95, "loss": 0.05}
+
+config = TrainingConfig(learning_rate=0.001, batch_size=32, epochs=10)
+result = train_model(config)
+
+# All config fields are automatically unpacked and tracked!
+tracker.latest
+{
+    'function_name': 'train_model',
+    'config_learning_rate': 0.001,      # ← Unpacked from dataclass
+    'config_batch_size': 32,            # ← Unpacked from dataclass
+    'config_epochs': 10,                # ← Unpacked from dataclass
+    'config_optimizer': 'adam',         # ← Unpacked from dataclass
+    'accuracy': 0.95,
+    'loss': 0.05,
+    'timestamp': '...',
+    'track_id': '...'
+}
+```
+
+**Works with multiple dataclasses:**
+
+```python
+@dataclass(frozen=True)
+class ModelConfig:
+    model_type: str
+    num_layers: int
+
+@dataclass(frozen=True)
+class DataConfig:
+    dataset: str
+    batch_size: int
+
+def experiment(model_cfg: ModelConfig, data_cfg: DataConfig):
+    return {"score": 0.92}
+
+result = tracker.track(
+    experiment,
+    args=[
+        ModelConfig(model_type="transformer", num_layers=12),
+        DataConfig(dataset="cifar10", batch_size=64)
+    ]
+)
+
+# Result includes: model_cfg.model_type, model_cfg.num_layers, 
+#                  data_cfg.dataset, data_cfg.batch_size, score
+```
+
+**Also works with Pydantic BaseModel:**
+
+```python
+from pydantic import BaseModel
+
+class ExperimentConfig(BaseModel):
+    experiment_name: str
+    seed: int
+    use_gpu: bool = True
+
+@tracker.wrap()
+def run_experiment(cfg: ExperimentConfig):
+    return {"status": "completed"}
+
+config = ExperimentConfig(experiment_name="exp_001", seed=42)
+result = run_experiment(config)
+
+# Automatically tracks: cfg.experiment_name, cfg.seed, cfg.use_gpu, status
+```
+
+**Benefits:**
+- Clean function signatures (one config object instead of many parameters)
+- All config values automatically tracked individually for easy filtering/analysis
+- Works with both `tracker.track()` and `@tracker.wrap()` decorator
+- Supports both frozen and non-frozen dataclasses
+- Compatible with Pydantic BaseModel via `model_dump()`
+
 ## Track assets (Oriented for ML models)
 
 Requirements: `pip install xetrack[assets]` (installs sqlitedict)
@@ -153,7 +263,7 @@ When you attempt to track a non primitive value which is not a list or a dict - 
 * Tips: If you plan to log the same object many times over, after the first time you log it, just insert the hash instead for future values to save time on encoding and hashing.
 
 ```python
-$ tracker = Tracker('database.db', params={'model': 'logistic regression'})
+$ tracker = Tracker('database_db', params={'model': 'logistic regression'})
 $ lr = Logisticregression().fit(X_train, y_train)
 $ tracker.log({'accuracy': float(lr.score(X_test, y_test)), 'lr': lr})
 {'accuracy': 0.9777777777777777, 'lr': '53425a65a40a49f4',  # <-- this is the model hash
@@ -174,7 +284,7 @@ xt assets export database.db 53425a65a40a49f4 model.cloudpickle
 ```python
 # python
 import cloudpickle
-with open("model.cloudpickle", 'rb') as f:
+with open("model_cloudpickle", 'rb') as f:
     model = cloudpickle.loads(f.read())
 # LogisticRegression()
 ```
@@ -196,7 +306,7 @@ Simply provide a `cache` parameter with a directory path to enable automatic cac
 ```python
 from xetrack import Tracker
 
-tracker = Tracker(db='track.db', cache='cache_dir')
+tracker = Tracker(db='track_db', cache='cache_dir')
 
 def expensive_computation(x: int, y: int) -> int:
     """Simulate expensive computation"""
@@ -223,7 +333,7 @@ Cache behavior is tracked in the database with the `cache` field for full lineag
 ```python
 from xetrack import Reader
 
-df = Reader(db='track.db').to_df()
+df = Reader(db='track_db').to_df()
 print(df[['function_name', 'function_time', 'cache', 'track_id']])
 #   function_name           function_time  cache           track_id
 # 0 expensive_computation   2.345          ""              abc123      # Computed (cache miss)
@@ -397,7 +507,7 @@ $ duckdb -ui
 │ UI started at http://localhost:4213/ │
 └──────────────────────────────────────┘
 
-D INSTALL sqlite; LOAD sqlite; ATTACH 'database.db' AS db (TYPE sqlite);
+D INSTALL sqlite; LOAD sqlite; ATTACH 'database_db' AS db (TYPE sqlite);
 # navigate browser to http://localhost:4213/
 
 # or run directly in terminal
@@ -419,7 +529,7 @@ On great use-case is **model monitoring**.
 
 ```python
 $ Tracker(db=Tracker.IN_MEMORY, logs_path='logs',logs_stdout=True).log({"accuracy":0.9})
-2023-12-14 21:46:55.290 | TRACKING | xetrack.logging:log:69!📁!{"a": 1, "b": 2, "timestamp": "2023-12-14 21:46:55.290098", "track_id": "marvellous-stork-4885"}
+2023-12-14 21:46:55.290 | TRACKING | xetrack_logging:log:69!📁!{"a": 1, "b": 2, "timestamp": "2023-12-14 21:46:55.290098", "track_id": "marvellous-stork-4885"}
 
 $ Reader.read_logs(path='logs')
    accuracy                   timestamp                track_id
@@ -439,7 +549,7 @@ JSONL (JSON Lines) format is ideal for building machine learning datasets, data 
 ```python
 # Enable JSONL logging
 tracker = Tracker(
-    db='database.db',
+    db='database_db',
     jsonl='logs/data.jsonl'  # Write structured logs to JSONL
 )
 
@@ -473,10 +583,10 @@ Note: Timestamp is in ISO 8601 format with timezone for maximum compatibility.
 df = Reader.read_jsonl('logs/tracking.jsonl')
 
 # From database (class method for convenience)
-df = Reader.read_db('database.db', engine='sqlite', table='default')
+df = Reader.read_db('database_db', engine='sqlite', table='default')
 
 # From database with filtering
-df = Reader.read_db('database.db', track_id='specific-run-id', head=100)
+df = Reader.read_db('database_db', track_id='specific-run-id', head=100)
 ```
 
 ## Analysis
@@ -487,7 +597,7 @@ Use this for further analysis and plotting.
 
 ```python
 from xetrack import Reader
-df = Reader('database.db').to_df() 
+df = Reader('database_db').to_df() 
 ```
 
 ### Model Monitoring

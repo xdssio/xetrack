@@ -10,6 +10,8 @@ import psutil
 import re
 from coolname import generate_slug
 import random
+import dataclasses
+import inspect
 
 from xetrack.stats import Stats
 from xetrack.engine import Engine, SqliteEngine
@@ -446,6 +448,125 @@ class Tracker:
             data[TRACKER_CONSTANTS.FUNCTION_RESULT] = result
         return data
 
+    def _extract_dataclass_fields(
+        self, obj: Any, prefix: str, _seen: Optional[set] = None, _depth: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Extract fields from a dataclass or Pydantic BaseModel, recursively handling nested structures.
+
+        Args:
+            obj: The dataclass or BaseModel instance
+            prefix: The prefix to use for field names (e.g., 'd' for parameter d)
+            _seen: Internal set to track visited objects (circular reference detection)
+            _depth: Internal counter to limit recursion depth
+
+        Returns:
+            Dictionary with prefixed field names and values
+        """
+        # Prevent infinite recursion
+        MAX_DEPTH = 10
+        if _depth >= MAX_DEPTH:
+            if self.warnings and self.logger:
+                self.logger.warning(
+                    f"Max nesting depth ({MAX_DEPTH}) reached for {prefix}"
+                )
+            return {}
+
+        # Circular reference detection
+        if _seen is None:
+            _seen = set()
+        obj_id = id(obj)
+        if obj_id in _seen:
+            if self.warnings and self.logger:
+                self.logger.warning(f"Circular reference detected for {prefix}")
+            return {}
+
+        result = {}
+
+        # Check if it's a dataclass
+        if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+            _seen.add(obj_id)
+            try:
+                for field in dataclasses.fields(obj):
+                    field_value = getattr(obj, field.name)
+                    field_key = f"{prefix}_{field.name}"
+
+                    # Skip None values
+                    if field_value is None:
+                        result[field_key] = None
+                        continue
+
+                    # Recursively unpack nested dataclasses
+                    if dataclasses.is_dataclass(field_value) and not isinstance(
+                        field_value, type
+                    ):
+                        nested = self._extract_dataclass_fields(
+                            field_value, field_key, _seen, _depth + 1
+                        )
+                        result.update(nested)
+                    # Check for nested Pydantic models
+                    elif hasattr(field_value, "model_dump") and callable(
+                        getattr(field_value, "model_dump")
+                    ):
+                        nested = self._extract_dataclass_fields(
+                            field_value, field_key, _seen, _depth + 1
+                        )
+                        result.update(nested)
+                    else:
+                        # Store the value as-is (will be validated later)
+                        result[field_key] = field_value
+            finally:
+                _seen.discard(obj_id)
+            return result
+
+        # Check if it's a Pydantic BaseModel (duck typing - check for model_dump method)
+        if hasattr(obj, "model_dump") and callable(getattr(obj, "model_dump")):
+            _seen.add(obj_id)
+            try:
+                # Pydantic's model_dump() already handles nested models
+                # Use mode='python' to preserve nested structure (not JSON serialization)
+                try:
+                    model_dict = obj.model_dump(mode="python")
+                except TypeError:
+                    # Fallback for Pydantic v1 which doesn't have mode parameter
+                    model_dict = obj.model_dump()
+
+                for key, value in model_dict.items():
+                    field_key = f"{prefix}_{key}"
+
+                    # Skip None values
+                    if value is None:
+                        result[field_key] = None
+                        continue
+
+                    # Recursively unpack nested structures (if Pydantic preserves them)
+                    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+                        nested = self._extract_dataclass_fields(
+                            value, field_key, _seen, _depth + 1
+                        )
+                        result.update(nested)
+                    elif hasattr(value, "model_dump") and callable(
+                        getattr(value, "model_dump")
+                    ):
+                        nested = self._extract_dataclass_fields(
+                            value, field_key, _seen, _depth + 1
+                        )
+                        result.update(nested)
+                    else:
+                        result[field_key] = value
+                return result
+            except (AttributeError, TypeError, ValueError) as e:
+                # Specific exceptions for model_dump failures
+                if self.warnings and self.logger:
+                    self.logger.warning(
+                        f"Failed to extract Pydantic fields from {prefix}: {e}"
+                    )
+                return {}
+            finally:
+                _seen.discard(obj_id)
+
+        return result
+
     def _run_func(self, func: callable, *args, **kwargs):  # type: ignore
         """
         Runs a given function with the provided arguments and keyword arguments.
@@ -483,6 +604,30 @@ class Tracker:
             "error": error,
             "function_time": func_time,
         }
+
+        # Extract dataclass/BaseModel fields from function arguments
+        # Get function signature to map args to parameter names
+        try:
+            sig = inspect.signature(func)
+            param_names = list(sig.parameters.keys())
+
+            # Process positional arguments
+            for i, arg in enumerate(args):
+                if i < len(param_names):
+                    param_name = param_names[i]
+                    fields = self._extract_dataclass_fields(arg, param_name)
+                    data.update(fields)
+
+            # Process keyword arguments
+            for key, value in kwargs.items():
+                fields = self._extract_dataclass_fields(value, key)
+                data.update(fields)
+
+        except Exception as e:
+            # If signature inspection fails, just skip field extraction
+            if self.logger and self.warnings:
+                self.logger.debug(f"Could not extract dataclass fields: {e}")
+
         data = self.validate_result(data, result)
         return data, result, exception
 
@@ -758,7 +903,10 @@ class Tracker:
             self.add_column(valid_key, value)
 
             # Store the value
-            if self._is_primitive(value):
+            if value is None:
+                # Handle None explicitly
+                result[valid_key] = None
+            elif self._is_primitive(value):
                 result[valid_key] = value
             elif isinstance(value, (dict, list, tuple)):
                 # Convert complex data structures to strings

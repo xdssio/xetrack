@@ -284,7 +284,7 @@ class SqliteEngine(Engine[sqlite3.Connection]):
         if "." in table:
             return table.split(".")[-1]
         return table
-    
+
     def _quote_table_name(self, table: str) -> str:
         """
         Quote table name to handle reserved keywords like 'default'.
@@ -299,10 +299,13 @@ class SqliteEngine(Engine[sqlite3.Connection]):
     
     def create_table(self, table: str, columns: Dict[str, str], primary_key: Optional[List[str]] = None) -> None:
         quoted_table_name = self._quote_table_name(table)
-            
+
         column_defs = [f"{col} {dtype}" for col, dtype in columns.items()]
         if primary_key:
             column_defs.append(f"PRIMARY KEY ({', '.join(primary_key)})")
+        
+        query = f"CREATE TABLE IF NOT EXISTS {quoted_table_name} ({', '.join(column_defs)})"
+        self.execute(query)
         
         query = f"CREATE TABLE IF NOT EXISTS {quoted_table_name} ({', '.join(column_defs)})"
         self.execute(query)

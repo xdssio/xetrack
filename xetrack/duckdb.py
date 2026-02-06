@@ -111,7 +111,7 @@ class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
             # Log the error with details
             logger.error(f"Error executing query: {query} with params: {params} - {str(e)}")
             raise
-    
+
     def add_column(self, table: str, column: str, dtype: str) -> None:
         """Add a column to a table if it doesn't exist."""
         self.execute(f"ALTER TABLE {table} ADD COLUMN {column} {dtype}")
