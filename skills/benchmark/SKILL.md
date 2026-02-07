@@ -93,12 +93,28 @@ def test_prediction_function():
     assert isinstance(result['prediction'], bool)
 
 def test_error_handling():
-    """Test that errors are caught and logged."""
+    """
+    CRITICAL TEST: Ensure errors are caught and logged, not raised.
+
+    Your prediction function MUST handle errors gracefully:
+    - Catch exceptions
+    - Return error info in result dict
+    - Don't break the entire experiment loop
+    """
     params = ModelParams(model='test', threshold=0.5)
     bad_item = {'id': 1}  # Missing required fields
 
+    # This should NOT raise an exception
     result = predict(bad_item, params)
+
+    # Error should be captured in result
     assert 'error' in result
+    assert result['error'] is not None
+    assert 'error_type' in result  # Categorize errors
+
+    # Other fields should still be present (even if null)
+    assert 'input_id' in result
+    assert 'prediction' in result  # Should be None or default value
 
 def test_caching():
     """Test that same input gives cache hit."""
@@ -136,11 +152,416 @@ pytest -v tests/
 for item in test_dataset:
     result = dev_tracker.track(predict, args=[item, params])
 
-# Check results
-print(Reader(db='dev_benchmark.db', table='test_predictions').to_df())
+# ========================================
+# CRITICAL: INSPECT THE DATA
+# ========================================
+inspect_dev_data('dev_benchmark.db', 'test_predictions')
 
 # If bugs found → fix → delete test runs → test again
 subprocess.run(['xt', 'delete', 'dev_benchmark.db', test_track_id])
+```
+
+### Data Inspection During Development
+
+**Always inspect your data before moving to production!**
+
+```python
+def inspect_dev_data(db_path, table_name, n_samples=10):
+    """
+    Peek at tracked data to catch issues during development.
+
+    Checks for:
+    - Missing values (NULLs)
+    - Nonsensical values (negative probabilities, out-of-range)
+    - Data type issues
+    - Empty strings or zero values where unexpected
+    """
+    from xetrack import Reader
+    import pandas as pd
+
+    print("\n" + "="*70)
+    print(f"📊 DATA INSPECTION: {table_name}")
+    print("="*70 + "\n")
+
+    # Read data
+    reader = Reader(db=db_path, table=table_name)
+    df = reader.to_df()
+
+    if len(df) == 0:
+        print("❌ No data found! Did the tracking work?")
+        return False
+
+    print(f"✅ Found {len(df)} rows\n")
+
+    issues_found = []
+
+    # ========================================
+    # 1. SHOW SAMPLE DATA
+    # ========================================
+    print(f"1️⃣  SAMPLE DATA (first {n_samples} rows)")
+    print("-" * 70)
+
+    # Show key columns (exclude internal xetrack columns for clarity)
+    display_cols = [c for c in df.columns
+                    if c not in ['timestamp', 'track_id', 'function_name', 'function_time']]
+
+    print(df[display_cols].head(n_samples).to_string())
+    print()
+
+    # ========================================
+    # 2. CHECK FOR MISSING VALUES
+    # ========================================
+    print("2️⃣  MISSING VALUES CHECK")
+    print("-" * 70)
+
+    missing = df.isnull().sum()
+    missing_pct = (missing / len(df) * 100).round(1)
+
+    has_missing = False
+    for col in df.columns:
+        if missing[col] > 0:
+            has_missing = True
+            pct = missing_pct[col]
+            symbol = "⚠️" if pct > 50 else "❌"
+            print(f"{symbol} {col}: {missing[col]} missing ({pct}%)")
+
+            if col.startswith('params_') or col in ['prediction', 'ground_truth', 'raw_response']:
+                issues_found.append(f"Missing values in critical field: {col}")
+
+    if not has_missing:
+        print("✅ No missing values")
+    print()
+
+    # ========================================
+    # 3. CHECK FOR NONSENSICAL VALUES
+    # ========================================
+    print("3️⃣  DATA VALIDATION CHECK")
+    print("-" * 70)
+
+    checks_run = 0
+
+    # Check probabilities (should be 0-1)
+    prob_cols = [c for c in df.columns if 'prob' in c.lower() or 'confidence' in c.lower()]
+    for col in prob_cols:
+        checks_run += 1
+        if df[col].dtype in ['float64', 'float32']:
+            invalid = ((df[col] < 0) | (df[col] > 1)).sum()
+            if invalid > 0:
+                print(f"❌ {col}: {invalid} values outside [0, 1] range")
+                issues_found.append(f"{col} has probabilities outside [0, 1]")
+            else:
+                print(f"✅ {col}: all values in [0, 1]")
+
+    # Check for negative values in fields that shouldn't be negative
+    non_negative_keywords = ['latency', 'time', 'duration', 'cost', 'count', 'length', 'tokens']
+    non_negative_cols = [c for c in df.columns
+                        if any(kw in c.lower() for kw in non_negative_keywords)]
+
+    for col in non_negative_cols:
+        checks_run += 1
+        if df[col].dtype in ['float64', 'float32', 'int64', 'int32']:
+            negative = (df[col] < 0).sum()
+            if negative > 0:
+                print(f"❌ {col}: {negative} negative values (should be >= 0)")
+                issues_found.append(f"{col} has negative values")
+            else:
+                print(f"✅ {col}: all values >= 0")
+
+    # Check for empty strings in important text fields
+    text_cols = [c for c in df.columns if 'response' in c.lower() or 'text' in c.lower()]
+    for col in text_cols:
+        checks_run += 1
+        if df[col].dtype == 'object':
+            empty = (df[col].str.strip() == '').sum()
+            null = df[col].isnull().sum()
+            if empty > 0 or null > 0:
+                print(f"⚠️ {col}: {empty} empty strings, {null} nulls")
+                if col == 'raw_response':
+                    issues_found.append("raw_response has empty values - not saving model output!")
+
+    # Check for all-zero or all-same values
+    for col in df.columns:
+        checks_run += 1
+        if col not in ['timestamp', 'track_id']:
+            n_unique = df[col].nunique()
+            if n_unique == 1:
+                value = df[col].iloc[0]
+                print(f"⚠️ {col}: ALL values are the same ({value})")
+                if col.startswith('params_'):
+                    # This might be OK if testing one config
+                    pass
+                else:
+                    issues_found.append(f"{col} has no variation (all same value)")
+
+    if checks_run == 0:
+        print("ℹ️ No numeric fields to validate")
+    print()
+
+    # ========================================
+    # 4. CHECK DATA TYPES
+    # ========================================
+    print("4️⃣  DATA TYPES")
+    print("-" * 70)
+
+    for col in df.columns:
+        dtype = df[col].dtype
+
+        # Flag if numeric field stored as string
+        if dtype == 'object' and col in ['accuracy', 'loss', 'latency', 'cost', 'confidence']:
+            print(f"⚠️ {col}: stored as STRING but should be NUMERIC")
+            issues_found.append(f"{col} stored as string instead of numeric")
+
+    # Show data types for reference
+    print("\nData types summary:")
+    print(df.dtypes.value_counts().to_string())
+    print()
+
+    # ========================================
+    # 5. SUMMARY
+    # ========================================
+    print("="*70)
+    if issues_found:
+        print("❌ ISSUES FOUND - FIX BEFORE MOVING TO PRODUCTION")
+        print("="*70)
+        for i, issue in enumerate(issues_found, 1):
+            print(f"  {i}. {issue}")
+        print()
+        print("Common fixes:")
+        print("  • Missing values: Check if function returns all expected fields")
+        print("  • Wrong ranges: Check calculation logic (probabilities, times, etc.)")
+        print("  • Empty raw_response: Ensure model output is being captured")
+        print("  • All same values: Check if parameter is actually varying")
+        print("  • Wrong data types: Check return types from function")
+        print()
+        return False
+    else:
+        print("✅ DATA LOOKS GOOD - NO ISSUES FOUND")
+        print("="*70)
+        print()
+        return True
+
+# Example usage in dev workflow:
+for item in test_dataset:
+    result = dev_tracker.track(predict, args=[item, params])
+
+# Inspect before moving to production
+if not inspect_dev_data('dev_benchmark.db', 'test_predictions'):
+    print("\n⚠️ Fix data issues before moving to production!")
+    print("1. Fix your predict() function")
+    print("2. Delete test data: xt delete dev_benchmark.db <track_id>")
+    print("3. Run tests again")
+    print("4. Re-inspect until clean")
+    exit(1)
+
+# Validate error handling strategy
+if not validate_error_handling('dev_benchmark.db', 'test_predictions'):
+    print("\n⚠️ Error handling not validated!")
+    exit(1)
+```
+
+### Error Handling Validation
+
+**CRITICAL:** Your prediction function MUST handle errors gracefully - errors should be tracked, not break the experiment.
+
+```python
+def validate_error_handling(db_path, table_name):
+    """
+    Enforce error handling validation during development.
+
+    Checks:
+    1. Does the schema have 'error' and 'error_type' fields?
+    2. Are there any test errors in the data?
+    3. Does user understand the error handling strategy?
+    """
+    from xetrack import Reader
+
+    print("\n" + "="*70)
+    print("⚠️  ERROR HANDLING VALIDATION")
+    print("="*70 + "\n")
+
+    # Read data
+    reader = Reader(db=db_path, table=table_name)
+    df = reader.to_df()
+
+    if len(df) == 0:
+        print("❌ No data to validate")
+        return False
+
+    # Check if error fields exist
+    has_error_field = 'error' in df.columns
+    has_error_type = 'error_type' in df.columns
+
+    print("1️⃣  ERROR FIELD CHECK")
+    print("-" * 70)
+
+    if not has_error_field:
+        print("❌ CRITICAL: No 'error' field in data!")
+        print("   Your prediction function MUST return an 'error' field.")
+        print()
+        print("   Example:")
+        print("   def predict(item, params):")
+        print("       try:")
+        print("           # ... your prediction logic ...")
+        print("           return {")
+        print("               'prediction': result,")
+        print("               'error': None,  # ← No error")
+        print("               'error_type': None")
+        print("           }")
+        print("       except Exception as e:")
+        print("           return {")
+        print("               'prediction': None,  # ← Failed")
+        print("               'error': str(e),     # ← Error message")
+        print("               'error_type': type(e).__name__  # ← Error type")
+        print("           }")
+        print()
+        return False
+
+    print("✅ 'error' field exists\n")
+
+    # Check for errors in data
+    print("2️⃣  ERROR FREQUENCY")
+    print("-" * 70)
+
+    error_count = df['error'].notna().sum()
+    error_rate = error_count / len(df) * 100
+
+    if error_count > 0:
+        print(f"⚠️  Found {error_count} errors ({error_rate:.1f}%)")
+
+        if has_error_type:
+            print("\n   Error breakdown:")
+            error_types = df[df['error'].notna()]['error_type'].value_counts()
+            for error_type, count in error_types.items():
+                print(f"   - {error_type}: {count}")
+
+        print("\n   This is GOOD - your error handling is working!")
+        print("   Errors are being caught and tracked, not breaking the loop.")
+    else:
+        print("ℹ️  No errors found in test data")
+        print("   This is OK, but make sure you've tested error cases.")
+
+    print()
+
+    # Force user decision on error handling strategy
+    print("3️⃣  ERROR HANDLING STRATEGY")
+    print("-" * 70)
+    print("You MUST decide how to handle errors in experiments:\n")
+
+    print("Options:")
+    print("  [1] TRACK and CONTINUE (Recommended)")
+    print("      - Errors are logged with 'error' field")
+    print("      - Experiment continues with remaining items")
+    print("      - Analyze errors after completion")
+    print("      - Pro: Get results even with some failures")
+    print("      - Con: May not notice critical issues immediately")
+    print()
+    print("  [2] TRACK and SKIP (Partial results)")
+    print("      - Errors are logged")
+    print("      - Failed items don't contribute to metrics")
+    print("      - Still get results from successful items")
+    print()
+    print("  [3] STOP on first error (Debug mode)")
+    print("      - Useful during development")
+    print("      - NOT recommended for production experiments")
+    print("      - Wastes time on transient errors (API timeouts, etc.)")
+    print()
+
+    choice = input("Your error handling strategy [1/2/3]: ").strip()
+
+    if choice == '1':
+        print("\n✅ TRACK and CONTINUE strategy selected")
+        print("   Implementation:")
+        print("   - Wrap predict() in try/except")
+        print("   - Return {'error': str(e), 'error_type': type(e).__name__}")
+        print("   - Filter errors during analysis: df[df['error'].isna()]")
+        print()
+        return True
+
+    elif choice == '2':
+        print("\n✅ TRACK and SKIP strategy selected")
+        print("   Implementation:")
+        print("   - Wrap predict() in try/except")
+        print("   - Return {'error': str(e), ...}")
+        print("   - In metrics calculation: results = [r for r in results if r['error'] is None]")
+        print()
+        return True
+
+    elif choice == '3':
+        print("\n⚠️  STOP on error strategy")
+        print("   This is only for development/debugging.")
+        print("   For production experiments, use strategy [1] or [2].")
+        print()
+        return False
+
+    else:
+        print("\n❌ Invalid choice. You MUST select an error handling strategy.")
+        return False
+
+# Example implementation of strategy #1 (TRACK and CONTINUE):
+def predict_with_error_handling(item, params):
+    """
+    Recommended pattern: Track errors but don't break the loop.
+    """
+    try:
+        # Your actual prediction logic
+        if 'text' not in item:
+            raise ValueError("Missing 'text' field")
+
+        prediction = model.predict(item['text'], params)
+
+        return {
+            'input_id': item['id'],
+            'prediction': prediction,
+            'raw_response': model.last_response,
+            'confidence': model.confidence,
+            'error': None,           # ← No error
+            'error_type': None
+        }
+
+    except Exception as e:
+        # Error occurred - track it but DON'T raise
+        return {
+            'input_id': item.get('id'),  # Might not exist
+            'prediction': None,          # ← Failed
+            'raw_response': None,
+            'confidence': None,
+            'error': str(e),             # ← Track error message
+            'error_type': type(e).__name__  # ← Track error type
+        }
+
+# During analysis, you can:
+# 1. Filter out errors: successful = df[df['error'].isna()]
+# 2. Analyze errors: errors = df[df['error'].notna()]
+# 3. Calculate error rate: error_rate = len(errors) / len(df)
+# 4. Group by error type: errors.groupby('error_type').size()
+```
+
+**Why this matters:**
+
+1. **Don't break experiments** - One API timeout shouldn't waste 3 hours of compute
+2. **Errors are data** - Track what fails and why
+3. **Post-hoc analysis** - Decide later if errors are acceptable
+4. **Robustness** - Production systems have transient failures
+
+**Common error types to handle:**
+```python
+# API errors
+except requests.exceptions.Timeout:
+    error_type = 'API_TIMEOUT'
+
+except openai.RateLimitError:
+    error_type = 'RATE_LIMIT'
+
+# Data errors
+except KeyError as e:
+    error_type = 'MISSING_FIELD'
+
+except ValueError as e:
+    error_type = 'INVALID_VALUE'
+
+# Model errors
+except Exception as e:  # Catch-all
+    error_type = 'UNKNOWN'
 ```
 
 **Exit criteria (ready for experiment phase):**
