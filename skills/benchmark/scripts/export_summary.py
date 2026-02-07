@@ -25,7 +25,7 @@ def export_summary(db_path: str, table: str = "events", engine: str = "duckdb"):
         sys.exit(1)
 
     # Read data
-    reader = Reader(db=db_path, engine=engine, table=table)
+    reader = Reader(db=db_path, engine=engine, table=table)  # type: ignore
     df = reader.to_df()
 
     if df.empty:
