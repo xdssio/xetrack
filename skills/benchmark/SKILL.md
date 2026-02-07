@@ -60,6 +60,223 @@ Follow this sequential workflow with users:
 
 ---
 
+## Critical: Development Phase vs Experiment Phase
+
+**IMPORTANT:** Benchmarking has two distinct phases. Do NOT mix them!
+
+### 🔧 Development Phase (Testing & Iteration)
+
+**Purpose:** Build and test your benchmark pipeline until it's bug-free.
+
+**Activities:**
+- Write unit tests for your prediction function
+- Test with small subsets (10-100 samples)
+- Iterate rapidly on code
+- Delete test runs frequently
+- Use separate track_id or table for testing (e.g., `test_predictions`)
+
+**Testing requirements:**
+```python
+import pytest
+
+def test_prediction_function():
+    """Unit test: ensure prediction function works correctly."""
+    params = ModelParams(model='test', threshold=0.5)
+    item = {'id': 1, 'x': 0.7, 'label': True}
+
+    result = predict(item, params)
+
+    # Verify output structure
+    assert 'input_id' in result
+    assert 'prediction' in result
+    assert 'ground_truth' in result
+    assert isinstance(result['prediction'], bool)
+
+def test_error_handling():
+    """Test that errors are caught and logged."""
+    params = ModelParams(model='test', threshold=0.5)
+    bad_item = {'id': 1}  # Missing required fields
+
+    result = predict(bad_item, params)
+    assert 'error' in result
+
+def test_caching():
+    """Test that same input gives cache hit."""
+    params = ModelParams(model='test', threshold=0.5)
+    item = {'id': 1, 'x': 0.7, 'label': True}
+
+    # First call
+    result1 = tracker.track(predict, args=[item, params])
+
+    # Second call (should be cached)
+    result2 = tracker.track(predict, args=[item, params])
+
+    # Both should have same result
+    assert result1['prediction'] == result2['prediction']
+```
+
+**Development workflow:**
+```python
+# DEV MODE: Use separate testing database or table
+dev_tracker = Tracker(
+    db='dev_benchmark.db',  # Or use table='test_predictions'
+    engine='sqlite',
+    cache='dev_cache',
+    table='test_predictions',
+    params={'phase': 'development'}
+)
+
+# Test with small subset
+test_dataset = dataset[:10]
+
+# Run tests
+pytest -v tests/
+
+# Run on subset
+for item in test_dataset:
+    result = dev_tracker.track(predict, args=[item, params])
+
+# Check results
+print(Reader(db='dev_benchmark.db', table='test_predictions').to_df())
+
+# If bugs found → fix → delete test runs → test again
+subprocess.run(['xt', 'delete', 'dev_benchmark.db', test_track_id])
+```
+
+**Exit criteria (ready for experiment phase):**
+- ✅ All unit tests pass
+- ✅ Tested on small subset (10-100 samples) successfully
+- ✅ No errors in test runs
+- ✅ Cache working correctly
+- ✅ Schema validated (no parameter renames)
+- ✅ Output format correct and consistent
+- ✅ Code committed to git
+
+### 🔬 Experiment Phase (Production Runs)
+
+**Purpose:** Run full, reproducible experiments for analysis.
+
+**Rules:**
+- ⛔ **NO CODE CHANGES during experiments** - If you need to change code, go back to dev phase
+- ✅ Run on full dataset
+- ✅ Track everything (code commit, data commit, timestamps)
+- ✅ Use production database/table (e.g., `predictions`, `metrics`)
+- ✅ Data must be committed (DVC)
+- ✅ Create git tags for each experiment
+
+**Experiment workflow:**
+```python
+# PRODUCTION MODE: Full dataset, everything tracked
+prod_tracker = Tracker(
+    db='benchmark.db',
+    engine='duckdb',
+    cache='cache',
+    table='predictions',
+    params={
+        'experiment_version': 'e0.0.1',
+        'code_commit': get_git_hash()[:7],
+        'data_commit': get_data_version()[:7]
+    }
+)
+
+# Pre-run validation
+assert validate_schema_before_experiment('benchmark.db', 'predictions', ModelParams)
+assert check_data_committed()  # Optional but recommended
+
+# Run full benchmark
+for item in full_dataset:  # All data
+    result = prod_tracker.track(predict, args=[item, params])
+
+# Tag experiment
+subprocess.run(['git', 'tag', '-a', 'e0.0.1', '-m', 'baseline model'])
+```
+
+### ⚠️ If You Need to Change Code During Experiments
+
+**STOP! Go back to development phase:**
+
+```python
+# ❌ WRONG: Making code changes during experiment phase
+# This breaks reproducibility!
+
+# ✅ RIGHT: Go back to development phase
+print("⚠️  Code change needed. Returning to development phase.")
+
+# 1. Switch to dev database/table
+dev_tracker = Tracker(db='dev_benchmark.db', ...)
+
+# 2. Make code changes
+# ... edit code ...
+
+# 3. Test changes on small subset
+# ... run tests ...
+
+# 4. When tests pass, commit code
+subprocess.run(['git', 'add', '.'])
+subprocess.run(['git', 'commit', '-m', 'fix: correct prediction logic'])
+
+# 5. Delete any partial experiment runs
+subprocess.run(['xt', 'delete', 'benchmark.db', partial_track_id])
+
+# 6. Restart experiment phase with new code
+new_experiment_version = increment_tag('e0.0.1')  # e0.0.2
+prod_tracker = Tracker(db='benchmark.db', params={'experiment_version': new_experiment_version})
+```
+
+### Phase Transition Checklist
+
+**Before moving from DEV → EXPERIMENT:**
+
+```python
+def ready_for_production():
+    """Checklist: Are we ready to leave development phase?"""
+    checks = []
+
+    # 1. Tests pass
+    result = subprocess.run(['pytest', '-v'], capture_output=True)
+    checks.append(('All tests pass', result.returncode == 0))
+
+    # 2. Schema validated
+    schema_ok = validate_schema_before_experiment('benchmark.db', 'predictions', ModelParams)
+    checks.append(('Schema validated', schema_ok))
+
+    # 3. Code committed
+    result = subprocess.run(['git', 'diff', '--quiet'], capture_output=True)
+    checks.append(('Code committed', result.returncode == 0))
+
+    # 4. Data committed (if using DVC)
+    data_ok = check_data_committed()
+    checks.append(('Data committed', data_ok))
+
+    # Print checklist
+    print("\n📋 Production Readiness Checklist:")
+    all_pass = True
+    for check_name, passed in checks:
+        symbol = '✅' if passed else '❌'
+        print(f"   {symbol} {check_name}")
+        if not passed:
+            all_pass = False
+
+    if all_pass:
+        print("\n✅ READY FOR PRODUCTION EXPERIMENTS")
+    else:
+        print("\n❌ NOT READY - Fix issues above")
+
+    return all_pass
+
+# Run before starting experiments
+if not ready_for_production():
+    print("Staying in development phase.")
+    exit(1)
+```
+
+**Summary:**
+- 🔧 **Dev phase** = Fast iteration, testing, small subsets, deletable runs
+- 🔬 **Experiment phase** = No code changes, full data, reproducible, git tagged
+- ⚠️ **Code change during experiment** = Go back to dev phase
+
+---
+
 ## Phase 1: Understand Goals & Design Experiment
 
 **Start from the end.** Before writing code, clarify:
