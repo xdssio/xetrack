@@ -720,3 +720,228 @@ $ xt plot scatter database.db x y
 pip install pytest-testmon pytest
 pytest -x -q -p no:warnings --testmon  tests
 ```
+
+---
+
+# Benchmark Skill for Claude Code
+
+xetrack includes a comprehensive **benchmark skill** for Claude Code that guides you through rigorous ML/AI benchmarking experiments.
+
+## What is the Benchmark Skill?
+
+The benchmark skill is an AI agent guide that helps you:
+- **Design experiments** following best practices (single-execution, caching, reproducibility)
+- **Track predictions & metrics** with the two-table pattern
+- **Validate results** for data leaks, duplicate executions, and missing params
+- **Analyze with DuckDB** using powerful SQL queries
+- **Version experiments** with git tags and DVC
+- **Avoid common pitfalls** (multiprocessing issues, cache problems, etc.)
+
+
+## Installation
+
+### Option 1: Install from Plugin Marketplace (Recommended)
+
+The easiest way to install the benchmark skill is directly from the xetrack repository using Claude Code's plugin marketplace:
+
+```bash
+# In Claude Code, add the xetrack marketplace
+/plugin marketplace add xdssio/xetrack
+
+# Install the benchmark skill
+/plugin install benchmark@xetrack
+```
+
+That's it! Claude Code will automatically download and configure the skill.
+
+**Update to latest version:**
+```bash
+/plugin marketplace update
+```
+
+### Option 2: Manual Installation
+
+```bash
+# Clone the xetrack repository
+git clone https://github.com/xdssio/xetrack.git
+
+# Copy the benchmark skill to Claude's skills directory
+cp -r xetrack/skills/benchmark ~/.claude/skills/benchmark
+
+# Verify installation
+ls ~/.claude/skills/benchmark/SKILL.md
+```
+
+## Usage with Claude Code
+
+Once installed, simply ask Claude to help with benchmarking:
+
+**Example prompts:**
+
+```
+"Help me benchmark 3 embedding models on my classification task"
+
+"Set up a benchmark comparing prompt variations for my LLM classifier"
+
+"I want to benchmark different sklearn models with hyperparameter search"
+
+"Debug my benchmark - I'm getting inconsistent results"
+```
+
+Claude will automatically use the benchmark skill and guide you through:
+
+1. **Phase 1**: Understanding your goals and designing the experiment
+2. **Phase 2**: Building a robust single-execution function
+3. **Phase 3**: Adding caching for efficiency
+4. **Phase 4**: Parallelizing (if needed)
+5. **Phase 5**: Running the full benchmark loop
+6. **Phase 6**: Validating results for common pitfalls
+7. **Phase 7**: Analyzing results with DuckDB
+
+## Features
+
+### Two-Table Pattern
+
+The skill teaches the recommended pattern of storing data in two tables:
+
+- **Predictions table**: Every single prediction/execution (detailed)
+- **Metrics table**: Aggregated results per experiment (summary)
+
+```python
+# Predictions table - granular data
+predictions_tracker = Tracker(
+    db='benchmark.db',
+    engine='duckdb',
+    table='predictions',
+    cache='cache_dir'
+)
+
+# Metrics table - aggregated results
+metrics_tracker = Tracker(
+    db='benchmark.db',
+    engine='duckdb',
+    table='metrics'
+)
+```
+
+### Git Tag-Based Versioning
+
+Automatic experiment versioning with git tags:
+
+```python
+# Skill helps you run experiments with versioned tags
+# e0.0.1 → e0.0.2 → e0.0.3
+
+# View experiment history:
+git tag -l 'e*' -n9
+# e0.0.1  model=logistic | lr=0.001 | acc=0.8200 | data=3a2f1b
+# e0.0.2  model=bert-base | lr=0.0001 | acc=0.8500 | data=3a2f1b
+# e0.0.3  model=bert-base | lr=0.0001 | acc=0.8900 | data=7c4e2a
+```
+
+### DVC Integration
+
+Built-in guidance for data and database versioning with DVC:
+
+```bash
+# Skill recommends DVC for reproducibility
+dvc add data/
+dvc add benchmark.db
+
+git add data.dvc benchmark.db.dvc
+git commit -m "experiment: e0.0.3 results"
+git tag -a e0.0.3 -m "model=bert-base | acc=0.8900"
+```
+
+### Validation Scripts
+
+Helper scripts to catch common issues:
+
+```bash
+# Check for data leaks, duplicates, missing params
+python skills/benchmark/scripts/validate_benchmark.py benchmark.db predictions
+
+# Analyze cache effectiveness
+python skills/benchmark/scripts/analyze_cache_hits.py benchmark.db predictions
+
+# Export markdown summary
+python skills/benchmark/scripts/export_summary.py benchmark.db predictions > RESULTS.md
+```
+
+### Common Pitfalls Documented
+
+The skill warns you about:
+- ⚠️ DuckDB + multiprocessing = database locks (use SQLite instead)
+- ⚠️ System monitoring incompatible with multiprocessing
+- ⚠️ Dataclass unpacking only works with `.track()`, not `.log()`
+- ⚠️ Model objects can bloat database (use assets)
+- ⚠️ Float parameters need rounding for consistent caching
+
+## Example Templates
+
+The skill includes complete examples for common scenarios:
+
+```bash
+# sklearn model comparison
+python skills/benchmark/assets/sklearn_benchmark_template.py
+
+# LLM finetuning simulation
+python skills/benchmark/assets/llm_finetuning_template.py
+
+# Load testing / throughput benchmark
+python skills/benchmark/assets/throughput_benchmark_template.py
+```
+
+## Documentation
+
+Full documentation is in the skill itself:
+
+- **SKILL.md**: Complete workflow and guidance
+- **references/methodology.md**: Core benchmarking principles
+- **references/duckdb-analysis.md**: SQL query recipes
+- **scripts/**: Helper validation and analysis scripts
+- **assets/**: Complete example templates
+
+## When to Use the Skill
+
+**Use the benchmark skill when:**
+- Comparing multiple models or hyperparameters
+- Testing expensive APIs (LLMs, cloud services)
+- Results will be shared or published
+- Reproducibility is critical
+- Running experiments that take > 10 minutes
+
+**Skip for:**
+- Quick one-off comparisons (< 5 minutes to rerun)
+- Early prototyping (speed > reproducibility)
+- Solo throwaway analysis
+
+## Troubleshooting
+
+**"Database is locked" errors with DuckDB:**
+- **Cause**: DuckDB doesn't handle concurrent writes from multiple processes
+- **Solution**: Switch to SQLite engine if using multiprocessing
+- **Details**: See SKILL.md Pitfall #2 for full explanation
+
+**Cache not working:**
+- **Check installation**: Ensure `pip install xetrack[cache]` was run
+- **Check dataclass**: Must be frozen: `@dataclass(frozen=True, slots=True)`
+- **Float parameters**: Need rounding for consistent hashing (see SKILL.md Pitfall #6)
+- **Verify cache directory**: Check that cache path is writable
+
+**Import errors:**
+- **xetrack not found**: Run `pip install xetrack`
+- **DuckDB features**: Run `pip install xetrack[duckdb]`
+- **Asset management**: Run `pip install xetrack[assets]`
+- **Caching support**: Run `pip install xetrack[cache]`
+
+**"Dataclass not unpacking" issues:**
+- **Check method**: Auto-unpacking only works with `.track()`, not `.log()`
+- **Verify frozen**: Dataclass must have `frozen=True`
+- **See SKILL.md**: Pitfall #3 for detailed explanation
+
+## Contributing
+
+Found an issue or want to improve the skill? Please open an issue or PR!
+
+The skill was developed by running real simulations and discovering pitfalls, so real-world feedback is valuable.
