@@ -1,6 +1,6 @@
 {
   "name": "benchmark",
-  "version": "0.5.2",
+  "version": "0.5.1",
   "description": "Comprehensive ML/AI benchmarking skill that guides users through rigorous experiment design, execution, and analysis using xetrack",
   "author": {
     "name": "XDSS"
