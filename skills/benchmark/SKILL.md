@@ -1261,34 +1261,110 @@ cat benchmark.db.dvc | grep md5
 
 ### Why Track Both Hashes?
 
-1. **Git commit hash** (`git rev-parse HEAD`):
-   - Tracks when the .dvc pointer file was committed
-   - Links experiment to exact git state
-   - Used for `git checkout <hash>` to reproduce
+1. **Code commit hash** (`git rev-parse HEAD`):
+   - **Captures entire repository state** - code, .dvc files, everything
+   - Guarantees exact reproducibility of the experiment
+   - Used for `git checkout <hash>` to restore complete state
 
-2. **DVC file modification hash** (`git log -n 1 ... -- data.dvc`):
-   - Tracks when the actual data last changed
-   - Multiple experiments can share same data version
+2. **Data commit hash** (`git log -n 1 ... -- data.dvc`):
+   - **Captures only when data.dvc changed** - tracks data versions independently
+   - Multiple experiments can share same data version (different code, same data)
    - Useful for identifying "same data, different model" comparisons
+
+**Critical purpose:** By tracking data.dvc commit separately, you can detect if data changed between experiments without comparing entire repo state.
+
+### Pre-Run Safety Check
+
+**IMPORTANT:** Always verify data is committed before running experiments:
+
+```python
+def check_data_committed():
+    """Ensure data.dvc is committed - prevents running experiments with uncommitted data."""
+    try:
+        # Check if data.dvc has uncommitted changes
+        result = subprocess.run(
+            ['git', 'diff', '--quiet', 'data.dvc'],
+            capture_output=True
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                "❌ ERROR: data.dvc has uncommitted changes!\n"
+                "   You MUST commit data changes before running experiments:\n"
+                "   1. dvc add data/\n"
+                "   2. git add data.dvc\n"
+                "   3. git commit -m 'data: updated dataset'\n"
+                "\n"
+                "   This ensures reproducibility - every experiment must have\n"
+                "   a committed data version."
+            )
+
+        # Also check if data.dvc is staged but not committed
+        result = subprocess.run(
+            ['git', 'diff', '--cached', '--quiet', 'data.dvc'],
+            capture_output=True
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                "❌ ERROR: data.dvc is staged but not committed!\n"
+                "   Run: git commit -m 'data: updated dataset'"
+            )
+
+        print("✅ Data is committed - safe to run experiment")
+        return True
+    except FileNotFoundError:
+        print("⚠️  data.dvc not found (may not be using DVC for data)")
+        return True
+
+# Call this BEFORE running experiments
+check_data_committed()
+```
+
+**Why this matters:**
+- Prevents "ghost experiments" with unversioned data
+- Forces reproducibility - every result can be traced to exact data version
+- Catches mistakes where data changed but wasn't committed
 
 **Example use case:**
 ```python
 # In your benchmark params
+def get_versions():
+    """Get both commit hashes for tracking."""
+    code_commit = subprocess.check_output(
+        ['git', 'rev-parse', 'HEAD']
+    ).decode().strip()
+
+    data_commit = subprocess.check_output(
+        ['git', 'log', '-n', '1', '--pretty=format:%H', '--', 'data.dvc']
+    ).decode().strip()
+
+    return code_commit[:7], data_commit[:7]
+
+# Before running experiment
+check_data_committed()
+
+code_commit, data_commit = get_versions()
 params = {
     'model': 'bert-base',
     'learning_rate': 0.0001,
-    'code_commit': git_rev_parse_head()[:7],
-    'data_version': git_log_data_dvc()[:7]  # Tracks data changes independently
+    'code_commit': code_commit,      # Entire repo state
+    'data_commit': data_commit       # Just data version
 }
 ```
 
 This lets you later query:
 ```sql
 -- Find all experiments using the same data version
-SELECT experiment_version, model, accuracy
+-- (useful to compare "same data, different hyperparameters")
+SELECT experiment_version, model, accuracy, code_commit, data_commit
 FROM metrics
-WHERE data_version = '3a2f1b'
+WHERE data_commit = '3a2f1b'  -- Same data across all these experiments
 ORDER BY accuracy DESC;
+
+-- Find experiments where ONLY data changed (code stayed same)
+SELECT experiment_version, accuracy, data_commit
+FROM metrics
+WHERE code_commit = 'a1b2c3d'  -- Same code
+ORDER BY data_commit;
 ```
 
 ### Benefits:
