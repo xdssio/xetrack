@@ -1,0 +1,35 @@
+{
+  "name": "xetrack",
+  "owner": {
+    "name": "XDSS"
+  },
+  "metadata": {
+    "description": "ML experiment tracking and benchmarking tools for Claude Code",
+    "version": "1.0.0",
+    "pluginRoot": "./skills"
+  },
+  "plugins": [
+    {
+      "name": "benchmark",
+      "source": "./skills/benchmark",
+      "description": "Comprehensive ML/AI benchmarking skill that guides users through rigorous experiment design, execution, and analysis using xetrack",
+      "version": "1.0.0",
+      "author": {
+        "name": "XDSS"
+      },
+      "homepage": "https://github.com/xdssio/xetrack",
+      "repository": "https://github.com/xdssio/xetrack",
+      "license": "MIT",
+      "category": "ml-tools",
+      "keywords": [
+        "benchmarking",
+        "machine-learning",
+        "experiments",
+        "tracking",
+        "xetrack",
+        "ml-ops",
+        "data-science"
+      ]
+    }
+  ]
+}

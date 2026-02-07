@@ -425,3 +425,9 @@ CLAUDE.md
 # Generated example data and test databases
 examples_data/
 experiments_db
+
+# Benchmark skill simulations (not for distribution)
+skills/benchmark/simulations/
+
+# But DO track the skill helper scripts (exception to [Ss]cripts pattern)
+!skills/benchmark/scripts/
