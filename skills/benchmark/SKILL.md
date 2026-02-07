@@ -1158,6 +1158,139 @@ print(f"✅ Experiment {next_tag} complete and tagged!")
 print(f"   Description: {tag_description}")
 ```
 
+### Complete Workflow: DVC + Git + Commit Hash Tracking
+
+Here's the full end-to-end workflow for tracking experiments with DVC versioning:
+
+```python
+#!/usr/bin/env python3
+"""Complete experiment workflow with DVC tracking and commit hash recording."""
+import subprocess
+
+# 1. Run your experiment (as shown above)
+# ... experiment code ...
+
+# 2. Track database with DVC
+subprocess.run(['dvc', 'add', 'benchmark.db'], check=True)
+print("✅ Database tracked with DVC")
+
+# 3. Add .dvc file to git (NOT the database itself!)
+subprocess.run(['git', 'add', 'benchmark.db.dvc', '.dvc/.gitignore'], check=True)
+
+# 4. Commit the .dvc file
+commit_msg = f"experiment: {next_tag} results"
+subprocess.run(['git', 'commit', '-m', commit_msg], check=True)
+
+# 5. Get the commit hash of this commit
+db_commit_hash = subprocess.check_output(
+    ['git', 'rev-parse', 'HEAD']
+).decode().strip()
+
+# 6. Get data version (commit hash when data.dvc was last modified)
+try:
+    data_commit_hash = subprocess.check_output(
+        ['git', 'log', '-n', '1', '--pretty=format:%H', '--', 'data.dvc']
+    ).decode().strip()
+except:
+    data_commit_hash = None
+
+# 7. Record commit hashes in a tracking file or database
+# Option A: Add to metrics table
+tracker_metrics.log({
+    'experiment_version': next_tag,
+    'db_commit': db_commit_hash[:7],  # Short hash
+    'data_commit': data_commit_hash[:7] if data_commit_hash else None,
+    'accuracy': 0.85,
+    'model': 'bert-base'
+})
+
+# Option B: Save to tracking file
+with open('experiment_log.txt', 'a') as f:
+    f.write(f"{next_tag}|{db_commit_hash}|{data_commit_hash}|{tag_description}\n")
+
+# 8. Create git tag with auto-generated description
+subprocess.run([
+    'git', 'tag', '-a', next_tag,
+    '-m', tag_description
+], check=True)
+
+# 9. Push database to DVC remote storage
+subprocess.run(['dvc', 'push'], check=True)
+
+# 10. Push git commits and tags
+subprocess.run(['git', 'push', 'origin', 'main'], check=True)
+subprocess.run(['git', 'push', 'origin', next_tag], check=True)
+
+print(f"""
+✅ Experiment {next_tag} complete!
+
+   Database commit: {db_commit_hash[:7]}
+   Data version:    {data_commit_hash[:7] if data_commit_hash else 'N/A'}
+   Description:     {tag_description}
+
+   To reproduce later:
+     git checkout {next_tag}
+     dvc pull
+""")
+```
+
+### Checking File Version Hashes
+
+Useful commands for tracking version information:
+
+```bash
+# Get commit hash of current HEAD
+git rev-parse HEAD
+
+# Get short hash (7 characters)
+git rev-parse --short HEAD
+
+# Get commit hash when specific file was last changed
+git log -n 1 --pretty=format:%H -- benchmark.db.dvc
+git log -n 1 --pretty=format:%H -- data.dvc
+
+# Get commit hash at specific tag
+git rev-parse e0.0.3
+
+# Check if file has changed since last commit
+git diff --quiet benchmark.db.dvc && echo "No changes" || echo "Modified"
+
+# Get DVC file hash (MD5 of actual data)
+cat benchmark.db.dvc | grep md5
+```
+
+### Why Track Both Hashes?
+
+1. **Git commit hash** (`git rev-parse HEAD`):
+   - Tracks when the .dvc pointer file was committed
+   - Links experiment to exact git state
+   - Used for `git checkout <hash>` to reproduce
+
+2. **DVC file modification hash** (`git log -n 1 ... -- data.dvc`):
+   - Tracks when the actual data last changed
+   - Multiple experiments can share same data version
+   - Useful for identifying "same data, different model" comparisons
+
+**Example use case:**
+```python
+# In your benchmark params
+params = {
+    'model': 'bert-base',
+    'learning_rate': 0.0001,
+    'code_commit': git_rev_parse_head()[:7],
+    'data_version': git_log_data_dvc()[:7]  # Tracks data changes independently
+}
+```
+
+This lets you later query:
+```sql
+-- Find all experiments using the same data version
+SELECT experiment_version, model, accuracy
+FROM metrics
+WHERE data_version = '3a2f1b'
+ORDER BY accuracy DESC;
+```
+
 ### Benefits:
 
 1. **Clear separation**: `e*` tags for experiments, `v*` tags for code releases
