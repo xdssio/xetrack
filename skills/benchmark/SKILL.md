@@ -548,6 +548,22 @@ with Pool(processes=4) as pool:
 
 ## Phase 5: Run Full Benchmark Loop
 
+### Pre-Run Validation Checklist
+
+Before running experiments, validate your setup:
+
+```python
+# 1. SCHEMA VALIDATION (recommended)
+# Detect parameter renames and schema drift
+if not validate_schema_before_experiment('benchmark.db', 'predictions', ModelParams):
+    print("❌ Schema validation failed. Fix issues before running.")
+    exit(1)
+
+# 2. DATA COMMIT CHECK (optional)
+# Ensure data.dvc is committed for reproducibility
+# check_data_committed()  # Uncomment if using DVC
+```
+
 ### Recommended Workflow: Debug Small, Then Scale
 
 **Best practice:** Start with a small subset to debug your pipeline before running the full benchmark.
@@ -1328,7 +1344,180 @@ cat benchmark.db.dvc | grep md5
 
 **Critical purpose:** By tracking data.dvc commit separately, you can detect if data changed between experiments without comparing entire repo state.
 
-### Recommended: Pre-Run Safety Check
+### Recommended: Schema Validation Before Experiments
+
+**Critical check:** Detect parameter renames or schema drift before running experiments.
+
+**Problem:** If you rename a parameter in code, xetrack creates a NEW column instead of reusing the old one:
+
+```python
+# Experiment 1
+params = {'learning_rate': 0.001}  # Creates column 'learning_rate'
+
+# Experiment 2 - renamed parameter (BUG!)
+params = {'lr': 0.001}  # Creates NEW column 'lr'
+# Old data in 'learning_rate', new data in 'lr' - split across columns!
+```
+
+**Solution:** Validate schema before running experiments:
+
+```python
+from xetrack import Reader
+import sqlite3
+from dataclasses import fields
+from difflib import get_close_matches
+
+def validate_schema_before_experiment(db_path, table, new_params_dataclass):
+    """
+    Compare current database schema with new experiment parameters.
+    Detect potential issues: renamed params, similar names, missing columns.
+    """
+    # 1. Get current schema from database
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute(f"PRAGMA table_info({table})")
+    existing_columns = {row[1] for row in cursor.fetchall()}
+    conn.close()
+
+    # 2. Extract parameter names from new dataclass
+    if hasattr(new_params_dataclass, '__dataclass_fields__'):
+        # It's a dataclass
+        new_param_names = {f'params_{f.name}' for f in fields(new_params_dataclass)}
+    else:
+        # It's a dict or object
+        new_param_names = {f'params_{k}' for k in new_params_dataclass.__dict__.keys()}
+
+    # 3. Detect potential issues
+    issues = []
+
+    # Check for renamed parameters (similar names)
+    for new_param in new_param_names:
+        if new_param not in existing_columns:
+            # Find similar column names (potential renames)
+            similar = get_close_matches(new_param, existing_columns, n=1, cutoff=0.6)
+            if similar:
+                issues.append({
+                    'type': 'POTENTIAL_RENAME',
+                    'new_param': new_param,
+                    'old_param': similar[0],
+                    'similarity': 'high'
+                })
+
+    # Check for missing parameters (were in schema, not in new code)
+    param_columns = {col for col in existing_columns if col.startswith('params_')}
+    missing_params = param_columns - new_param_names
+    if missing_params:
+        issues.append({
+            'type': 'MISSING_PARAMS',
+            'params': missing_params
+        })
+
+    # 4. Report issues and get user input
+    if issues:
+        print("\n⚠️  SCHEMA VALIDATION ISSUES DETECTED:\n")
+
+        for issue in issues:
+            if issue['type'] == 'POTENTIAL_RENAME':
+                print(f"❌ Potential parameter rename detected:")
+                print(f"   Old column: {issue['old_param']}")
+                print(f"   New param:  {issue['new_param']}")
+                print(f"\n   This will create a NEW column, splitting data across two columns!")
+                print(f"\n   Options:")
+                print(f"   1. Rename column in database: ALTER TABLE {table} RENAME COLUMN {issue['old_param']} TO {issue['new_param']}")
+                print(f"   2. Change code to use old name: {issue['old_param']}")
+                print(f"   3. Confirm this is intentional (creates new column)\n")
+
+            elif issue['type'] == 'MISSING_PARAMS':
+                print(f"⚠️  Parameters from previous experiments missing in new code:")
+                for param in issue['params']:
+                    print(f"   - {param}")
+                print(f"\n   If these were renamed, use ALTER TABLE to rename columns.")
+                print(f"   If intentionally removed, this is OK (old data preserved).\n")
+
+        print("   Actions:")
+        print("   [r] Rename column in database (recommended if parameter was renamed)")
+        print("   [c] Continue anyway (will create new columns)")
+        print("   [a] Abort (fix code first)")
+
+        choice = input("\n   Your choice: ").strip().lower()
+
+        if choice == 'r':
+            # Help user rename column
+            for issue in issues:
+                if issue['type'] == 'POTENTIAL_RENAME':
+                    old_col = issue['old_param']
+                    new_col = issue['new_param']
+                    print(f"\n📝 Renaming {old_col} → {new_col}")
+
+                    # Execute rename in SQLite
+                    conn = sqlite3.connect(db_path)
+                    conn.execute(f"ALTER TABLE {table} RENAME COLUMN {old_col} TO {new_col}")
+                    conn.commit()
+                    conn.close()
+
+                    print(f"✅ Column renamed successfully!")
+
+            print("\n✅ Schema updated. Safe to run experiment.")
+            return True
+
+        elif choice == 'c':
+            print("⚠️  Continuing with schema drift. New columns will be created.")
+            return True
+
+        else:  # 'a' or anything else
+            print("❌ Experiment aborted. Fix code or schema first.")
+            return False
+
+    else:
+        print("✅ Schema validation passed - no issues detected")
+        return True
+
+# Usage before running experiment:
+if not validate_schema_before_experiment('benchmark.db', 'predictions', ModelParams):
+    exit(1)  # Don't run experiment if validation failed
+```
+
+**Example output:**
+
+```
+⚠️  SCHEMA VALIDATION ISSUES DETECTED:
+
+❌ Potential parameter rename detected:
+   Old column: params_learning_rate
+   New param:  params_lr
+
+   This will create a NEW column, splitting data across two columns!
+
+   Options:
+   1. Rename column in database: ALTER TABLE predictions RENAME COLUMN params_learning_rate TO params_lr
+   2. Change code to use old name: params_learning_rate
+   3. Confirm this is intentional (creates new column)
+
+   Actions:
+   [r] Rename column in database (recommended if parameter was renamed)
+   [c] Continue anyway (will create new columns)
+   [a] Abort (fix code first)
+
+   Your choice: r
+
+📝 Renaming params_learning_rate → params_lr
+✅ Column renamed successfully!
+✅ Schema updated. Safe to run experiment.
+```
+
+**Why this matters:**
+- **Prevents data fragmentation** - Keeps related data in one column
+- **Maintains clean schema** - Avoids accumulating renamed columns
+- **SQLite flexibility** - Easy to rename columns with ALTER TABLE
+- **Catches mistakes early** - Before running expensive experiments
+
+**Best practice workflow:**
+1. Make code changes
+2. Run schema validation (detects renames)
+3. Fix schema or code
+4. Run experiment with clean schema
+
+### Recommended: Pre-Run Data Check
 
 **Best practice:** Verify data is committed before running experiments to ensure reproducibility:
 
