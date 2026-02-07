@@ -571,7 +571,166 @@ except Exception as e:  # Catch-all
 - ✅ Cache working correctly
 - ✅ Schema validated (no parameter renames)
 - ✅ Output format correct and consistent
+- ✅ **Code structure validated** (no chaotic functions that affect analysis)
 - ✅ Code committed to git
+
+### Code Structure for Benchmarking
+
+**Keep prediction functions simple - complexity leads to unusable results.**
+
+If your function is chaotic, refactor before experiments. Complex benchmarking code causes:
+- ❌ Hard to debug failures (can't isolate what went wrong)
+- ❌ Hard to compare results (logic mixed with I/O)
+- ❌ Hard to analyze errors (which component failed?)
+- ❌ Hard to trust results (too many moving parts)
+
+**Recommended structure (for benchmarking):**
+
+```python
+# ✅ GOOD: Simple, clear separation
+
+def predict(item: dict, params: ModelParams) -> dict:
+    """
+    Keep this function SIMPLE and FOCUSED on prediction logic.
+    Complexity = bugs = unusable benchmark results.
+    """
+    try:
+        # Step 1: Extract what you need
+        text = item['text']
+
+        # Step 2: Call your model/function
+        response = model.predict(text, temperature=params.temperature)
+
+        # Step 3: Return EVERYTHING (don't parse/filter)
+        return {
+            'input_id': item['id'],
+            'raw_response': response,        # ← CRITICAL: Save raw output
+            'prediction': extract_answer(response),
+            'ground_truth': item['label'],
+            'error': None
+        }
+
+    except Exception as e:
+        # Step 4: Handle errors gracefully
+        return {
+            'input_id': item.get('id'),
+            'raw_response': None,
+            'prediction': None,
+            'ground_truth': item.get('label'),
+            'error': str(e),
+            'error_type': type(e).__name__
+        }
+
+# If your function is >50 lines, extract helpers:
+def prepare_text(item):
+    return item['text'].strip()
+
+def extract_answer(response):
+    # Parsing logic here
+    return parsed_answer
+```
+
+**Anti-patterns that break benchmarks:**
+
+```python
+# ❌ BAD: Mixing I/O with logic
+def predict(item_id, params):  # Takes ID, not item
+    item = load_from_database(item_id)  # I/O inside function
+    response = model.predict(item['text'])
+    save_to_file(response)  # Side effect!
+    return parse(response)
+
+# Problems:
+# - Can't test without database
+# - Can't cache (item_id not hashable dataclass)
+# - Side effects make debugging hard
+# - What if save_to_file fails? Data lost!
+
+# ❌ BAD: Complex preprocessing inside
+def predict(item, params):
+    # 100 lines of preprocessing
+    text = item['text']
+    text = clean(text)
+    text = normalize(text)
+    text = augment(text)
+    text = tokenize(text)
+    # ... 95 more lines ...
+    return model.predict(text)
+
+# Problems:
+# - Can't isolate preprocessing bugs
+# - Hard to test model separately
+# - Can't reprocess differently later
+# - Which step caused the error?
+
+# ❌ BAD: Filtering/parsing too early
+def predict(item, params):
+    response = model.predict(item['text'])
+
+    # Only save if confident
+    if response['confidence'] > 0.8:  # ← Loses data!
+        return {'prediction': response['answer']}  # ← Only parsed output!
+    else:
+        return None  # ← Missing low-confidence examples!
+
+# Problems:
+# - Lost raw response (can't reprocess)
+# - Lost low-confidence data (can't analyze)
+# - Hard threshold decision (can't change later)
+```
+
+**Benchmarking-specific recommendations:**
+
+1. **Load data OUTSIDE the prediction function**
+   ```python
+   # ✅ GOOD
+   items = load_all_data()  # Once, outside loop
+   for item in items:
+       result = tracker.track(predict, args=[item, params])
+   ```
+
+2. **Keep prediction function PURE (input → output, no side effects)**
+   ```python
+   # ✅ GOOD: Pure function
+   def predict(item, params):
+       return {'prediction': ..., 'raw_response': ...}
+
+   # ❌ BAD: Side effects
+   def predict(item, params):
+       save_to_log(item)  # Side effect
+       update_global_counter()  # Side effect
+       return result
+   ```
+
+3. **Save RAW outputs, parse during analysis**
+   ```python
+   # ✅ GOOD: Save everything
+   return {'raw_response': response, 'prediction': parsed}
+
+   # ❌ BAD: Only save parsed
+   return {'prediction': parsed}  # Can't reprocess!
+   ```
+
+4. **If function is complex, extract to helpers**
+   ```python
+   # If predict() is >50 lines, break it down:
+   def prepare_input(item): ...
+   def call_model(text, params): ...
+   def parse_output(response): ...
+
+   def predict(item, params):
+       # Just orchestrate
+       text = prepare_input(item)
+       response = call_model(text, params)
+       parsed = parse_output(response)
+       return {'raw_response': response, 'prediction': parsed}
+   ```
+
+**Why this matters for benchmarking:**
+- Simple functions = easy to debug = trustworthy results
+- Pure functions = reproducible = cacheable
+- Raw data saved = reprocessable = flexible analysis
+- Clear errors = understandable failures = actionable insights
 
 ### 🔬 Experiment Phase (Production Runs)
 
