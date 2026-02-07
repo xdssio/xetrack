@@ -1,5 +1,21 @@
 {
   "name": "benchmark",
-  "description": "Comprehensive ML/AI benchmarking skill for xetrack users. Guides through experiment design, execution, and analysis with methodological rigor.",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "description": "Comprehensive ML/AI benchmarking skill that guides users through rigorous experiment design, execution, and analysis using xetrack",
+  "author": {
+    "name": "XDSS"
+  },
+  "homepage": "https://github.com/xdssio/xetrack",
+  "repository": "https://github.com/xdssio/xetrack",
+  "license": "MIT",
+  "category": "ml-tools",
+  "keywords": [
+    "benchmarking",
+    "machine-learning",
+    "experiments",
+    "tracking",
+    "xetrack",
+    "ml-ops",
+    "data-science"
+  ]
 }

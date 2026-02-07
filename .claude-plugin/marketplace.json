@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "ML experiment tracking and benchmarking tools for Claude Code",
-    "version": "1.0.0",
+    "version": "0.5.2",
     "pluginRoot": "./skills"
   },
   "plugins": [
@@ -13,7 +13,7 @@
       "name": "benchmark",
       "source": "./skills/benchmark",
       "description": "Comprehensive ML/AI benchmarking skill that guides users through rigorous experiment design, execution, and analysis using xetrack",
-      "version": "1.0.0",
+      "version": "0.5.2",
       "author": {
         "name": "XDSS"
       },
