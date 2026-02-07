@@ -548,7 +548,62 @@ with Pool(processes=4) as pool:
 
 ## Phase 5: Run Full Benchmark Loop
 
-Once validated, run the full benchmark using **both tables**:
+### Recommended Workflow: Debug Small, Then Scale
+
+**Best practice:** Start with a small subset to debug your pipeline before running the full benchmark.
+
+```python
+# 1. DEBUG MODE: Test with small subset first
+DEBUG = True  # Set to False for full run
+dataset_subset = dataset[:10] if DEBUG else dataset  # Only 10 items for testing
+
+# Run benchmark on subset
+for item in dataset_subset:
+    result = predictions_tracker.track(run_prediction, args=[item, params])
+
+# 2. Check results look correct
+print(f"Processed {len(dataset_subset)} items")
+reader = Reader(db='benchmark.db', table='predictions')
+print(reader.to_df().tail())
+
+# 3. If everything looks good, delete test runs to keep database clean
+if DEBUG:
+    # Get track_id from test run
+    track_ids = reader.to_df()['track_id'].unique()
+    for tid in track_ids:
+        print(f"Deleting test track_id: {tid}")
+        # Delete test data (CLI method)
+        subprocess.run(['xt', 'delete', 'benchmark.db', tid], check=True)
+        # Or use Python API (if available)
+        # tracker.delete(track_id=tid)
+
+    print("✅ Test runs deleted. Ready to run full benchmark.")
+    print("   Set DEBUG = False and run again.")
+```
+
+**Why this matters:**
+- **Catch bugs early** - Fix issues with 10 items, not 10,000
+- **Save time** - Don't wait hours to discover a parameter was wrong
+- **Clean database** - Delete test runs so they don't pollute analysis
+- **Iterate quickly** - Test → debug → delete → repeat until perfect
+
+**Deleting test runs:**
+```bash
+# CLI: Delete by track_id
+xt delete benchmark.db ancient-falcon-1234
+
+# Delete multiple track_ids
+for tid in test-id-1 test-id-2; do
+    xt delete benchmark.db $tid
+done
+
+# Or delete all data from specific table (nuclear option)
+xt sql benchmark.db "DELETE FROM db.predictions WHERE track_id = 'ancient-falcon-1234'"
+```
+
+### Full Benchmark
+
+Once validated with subset, run the full benchmark using **both tables**:
 
 ```python
 from xetrack import Tracker, Reader
@@ -1273,13 +1328,16 @@ cat benchmark.db.dvc | grep md5
 
 **Critical purpose:** By tracking data.dvc commit separately, you can detect if data changed between experiments without comparing entire repo state.
 
-### Pre-Run Safety Check
+### Recommended: Pre-Run Safety Check
 
-**IMPORTANT:** Always verify data is committed before running experiments:
+**Best practice:** Verify data is committed before running experiments to ensure reproducibility:
 
 ```python
 def check_data_committed():
-    """Ensure data.dvc is committed - prevents running experiments with uncommitted data."""
+    """
+    Optional safety check: warn if data.dvc has uncommitted changes.
+    Helps prevent running experiments with unversioned data.
+    """
     try:
         # Check if data.dvc has uncommitted changes
         result = subprocess.run(
@@ -1287,16 +1345,19 @@ def check_data_committed():
             capture_output=True
         )
         if result.returncode != 0:
-            raise RuntimeError(
-                "❌ ERROR: data.dvc has uncommitted changes!\n"
-                "   You MUST commit data changes before running experiments:\n"
+            print(
+                "⚠️  WARNING: data.dvc has uncommitted changes!\n"
+                "   Recommended: commit data changes before running experiments:\n"
                 "   1. dvc add data/\n"
                 "   2. git add data.dvc\n"
                 "   3. git commit -m 'data: updated dataset'\n"
                 "\n"
-                "   This ensures reproducibility - every experiment must have\n"
-                "   a committed data version."
+                "   This ensures reproducibility - every experiment will have\n"
+                "   a committed data version.\n"
             )
+            response = input("   Continue anyway? [y/N]: ").strip().lower()
+            if response != 'y':
+                raise RuntimeError("Experiment cancelled by user")
 
         # Also check if data.dvc is staged but not committed
         result = subprocess.run(
@@ -1304,25 +1365,27 @@ def check_data_committed():
             capture_output=True
         )
         if result.returncode != 0:
-            raise RuntimeError(
-                "❌ ERROR: data.dvc is staged but not committed!\n"
-                "   Run: git commit -m 'data: updated dataset'"
+            print(
+                "⚠️  WARNING: data.dvc is staged but not committed!\n"
+                "   Recommended: git commit -m 'data: updated dataset'\n"
             )
 
-        print("✅ Data is committed - safe to run experiment")
+        print("✅ Data is committed - good for reproducibility")
         return True
     except FileNotFoundError:
-        print("⚠️  data.dvc not found (may not be using DVC for data)")
+        print("ℹ️  data.dvc not found (may not be using DVC for data)")
         return True
 
-# Call this BEFORE running experiments
-check_data_committed()
+# Optional: call this before running experiments
+# check_data_committed()
 ```
 
-**Why this matters:**
+**Why this helps:**
 - Prevents "ghost experiments" with unversioned data
-- Forces reproducibility - every result can be traced to exact data version
+- Improves reproducibility - every result can be traced to exact data version
 - Catches mistakes where data changed but wasn't committed
+
+**Note:** This check is optional. For quick prototyping or debugging, you may want to skip it.
 
 **Example use case:**
 ```python
