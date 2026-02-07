@@ -916,6 +916,30 @@ Full documentation is in the skill itself:
 - Early prototyping (speed > reproducibility)
 - Solo throwaway analysis
 
+## Troubleshooting
+
+**"Database is locked" errors with DuckDB:**
+- **Cause**: DuckDB doesn't handle concurrent writes from multiple processes
+- **Solution**: Switch to SQLite engine if using multiprocessing
+- **Details**: See SKILL.md Pitfall #2 for full explanation
+
+**Cache not working:**
+- **Check installation**: Ensure `pip install xetrack[cache]` was run
+- **Check dataclass**: Must be frozen: `@dataclass(frozen=True, slots=True)`
+- **Float parameters**: Need rounding for consistent hashing (see SKILL.md Pitfall #6)
+- **Verify cache directory**: Check that cache path is writable
+
+**Import errors:**
+- **xetrack not found**: Run `pip install xetrack`
+- **DuckDB features**: Run `pip install xetrack[duckdb]`
+- **Asset management**: Run `pip install xetrack[assets]`
+- **Caching support**: Run `pip install xetrack[cache]`
+
+**"Dataclass not unpacking" issues:**
+- **Check method**: Auto-unpacking only works with `.track()`, not `.log()`
+- **Verify frozen**: Dataclass must have `frozen=True`
+- **See SKILL.md**: Pitfall #3 for detailed explanation
+
 ## Contributing
 
 Found an issue or want to improve the skill? Please open an issue or PR!

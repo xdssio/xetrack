@@ -47,7 +47,7 @@ def train_and_evaluate(X_train, y_train, X_test, y_test, params: ModelParams) ->
         elif params.model_type == 'random_forest':
             from sklearn.ensemble import RandomForestClassifier
             model = RandomForestClassifier(max_depth=int(params.regularization * 10),
-                                          max_iter=params.max_iter,
+                                          n_estimators=params.max_iter,
                                           random_state=params.random_state)
         elif params.model_type == 'svm':
             from sklearn.svm import SVC
@@ -109,9 +109,11 @@ def run_benchmark():
     ]
 
     # Initialize trackers for both tables
+    # NOTE: Using DuckDB for better analytics. If you need multiprocessing,
+    # change engine='duckdb' to engine='sqlite' to avoid database locks.
     predictions_tracker = Tracker(
         db='sklearn_benchmark.db',
-        engine='duckdb',
+        engine='duckdb',  # ⚠️ Change to 'sqlite' if using multiprocessing
         cache='sklearn_cache',
         table='predictions',  # Individual results
         params={'experiment_id': 'sklearn-comparison-v1'}
@@ -119,7 +121,7 @@ def run_benchmark():
 
     metrics_tracker = Tracker(
         db='sklearn_benchmark.db',
-        engine='duckdb',
+        engine='duckdb',  # ⚠️ Change to 'sqlite' if using multiprocessing
         table='metrics',  # Aggregated metrics
         params={'experiment_id': 'sklearn-comparison-v1'}
     )

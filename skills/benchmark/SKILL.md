@@ -39,11 +39,11 @@ Guide users through methodologically rigorous ML/AI benchmarking using xetrack, 
    - **MUST READ**: `/path/to/xetrack/examples/README.md` - Examples guide
    - **Run example**: `python examples/01_quickstart.py` to verify installation
 
-3. **Understand core concepts:**
-   - `Tracker(db, engine, table, params)` - Main tracking interface
+4. **Understand core concepts:**
+   - `Tracker(db, params=dict, engine='sqlite|duckdb', table='events')` - Main tracking interface
    - `tracker.log(dict)` - Log arbitrary data
-   - `tracker.track(func, args, kwargs)` - Track function execution
-   - `Reader(db, engine, table)` - Read tracked data
+   - `tracker.track(func, args, kwargs)` - Track function execution with auto-unpacking
+   - `Reader(db, engine='sqlite|duckdb', table='events')` - Read tracked data
    - `xt` CLI - Command-line interface for queries
 
 **⚠️ IMPORTANT:** xetrack is not a common package. DO NOT hallucinate APIs. Always reference README/examples for correct usage patterns.
@@ -100,6 +100,8 @@ Based on answers, recommend:
 | **Schema flexibility** | ✅ Add columns later | ✅ Add columns later |
 | **SQL table names** | `predictions` | `db.predictions` |
 | **Default** | ✅ Yes | No |
+
+**Note on table naming:** In Python code, always use simple table names like `table='predictions'`. The `db.` prefix is only needed when querying via DuckDB CLI after attaching the SQLite file: `ATTACH 'benchmark.db' AS db (TYPE sqlite);`
 
 **Decision flowchart:**
 ```
@@ -621,10 +623,7 @@ Before analysis, check for common pitfalls:
 # 1. Check for data leaks (same input_id evaluated multiple times)
 python scripts/validate_benchmark.py benchmark.db predictions
 
-# 2. Verify single-execution constraint
-python scripts/check_single_execution.py benchmark.db predictions
-
-# 3. Check for missing parameters
+# 2. Check for missing parameters
 xt sql benchmark.db "SELECT COUNT(*) FROM db.predictions WHERE params_model_name IS NULL"
 ```
 
@@ -706,7 +705,8 @@ import pandas as pd
 # Read all predictions
 # API Reference: Reader(db, engine='sqlite|duckdb', table='events')
 reader = Reader(db='benchmark.db', engine='duckdb', table='predictions')
-df = reader.to_df()  # or reader.to_df(all=True) for all track_ids
+df = reader.to_df()  # Gets all data by default
+# Or filter: df = reader.to_df(track_id='specific-run-id')
 
 # Calculate accuracy by model
 accuracy = df.groupby('params_model_name').apply(
@@ -821,7 +821,7 @@ See `assets/sklearn_benchmark_template.py` for complete example.
 
 ### Pattern 2: LLM Prompt Benchmarking
 
-See `assets/llm_benchmark_template.py` for complete example.
+See `assets/llm_finetuning_template.py` for complete example.
 
 **Key points:**
 - Save full LLM response (not just parsed output)
@@ -846,7 +846,6 @@ All scripts are in `scripts/`:
 
 - **`validate_benchmark.py`** - Check for data leaks, duplicate executions
 - **`analyze_cache_hits.py`** - Analyze caching effectiveness
-- **`check_single_execution.py`** - Verify single-execution constraint
 - **`export_summary.py`** - Generate markdown summaries
 
 Usage:
@@ -1278,9 +1277,7 @@ if __name__ == "__main__":
 For deeper guidance, see:
 
 - **`references/methodology.md`** - Core benchmarking principles and philosophy
-- **`references/xetrack-basics.md`** - xetrack patterns for benchmarking
 - **`references/duckdb-analysis.md`** - DuckDB queries and analysis recipes
-- **`references/validation-checklist.md`** - Complete validation checklist
 
 ---
 
