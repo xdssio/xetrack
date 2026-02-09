@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -27,6 +28,50 @@ try:
     import duckdb
 except ImportError:
     duckdb = None
+
+# Safe SQL identifier pattern: letters, digits, underscores; must start with letter/underscore.
+_SAFE_IDENTIFIER_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+
+
+def _validate_identifier(name: str, label: str = 'identifier') -> str:
+    """Validate that a string is a safe SQL identifier.
+
+    Args:
+        name: The identifier string to validate.
+        label: Human-readable label for error messages (e.g. 'table', 'column').
+
+    Returns:
+        The validated identifier string (unchanged).
+
+    Raises:
+        ValueError: If the identifier contains unsafe characters.
+    """
+    if not name or not _SAFE_IDENTIFIER_RE.match(name):
+        raise ValueError(
+            f"Invalid SQL {label}: {name!r}. "
+            f"Must match /^[A-Za-z_][A-Za-z0-9_]*$/"
+        )
+    return name
+
+
+def _validate_identifiers(names: list[str], label: str = 'column') -> list[str]:
+    """Validate a list of SQL identifiers.
+
+    Args:
+        names: List of identifier strings to validate.
+        label: Human-readable label for error messages.
+
+    Returns:
+        The validated list (unchanged).
+
+    Raises:
+        ValueError: If any identifier is invalid or the list is empty.
+    """
+    if not names:
+        raise ValueError(f"At least one {label} name is required")
+    for name in names:
+        _validate_identifier(name, label)
+    return names
 
 
 def _require_duckdb() -> None:
@@ -38,8 +83,19 @@ def _require_duckdb() -> None:
 
 def merge_sqlite(base_db: str, exp_dbs: list[str], output_db: str,
                  table: str = 'predictions', id_column: str = 'track_id') -> None:
-    """Merge: append all experiment rows into base. Non-destructive."""
+    """Merge: append all experiment rows into base. Non-destructive.
+
+    Args:
+        base_db: Path to the base SQLite database.
+        exp_dbs: List of experiment database paths to merge in.
+        output_db: Output database path (can be same as base_db for in-place).
+        table: Table name to merge. Must be a valid SQL identifier.
+        id_column: Column used for deduplication. Must be a valid SQL identifier.
+    """
     _require_duckdb()
+    _validate_identifier(table, 'table')
+    _validate_identifier(id_column, 'column')
+
     if base_db != output_db:
         shutil.copy2(base_db, output_db)
 
@@ -84,10 +140,20 @@ def merge_sqlite(base_db: str, exp_dbs: list[str], output_db: str,
 
 def rebase_sqlite(base_db: str, exp_dbs: list[str], output_db: str,
                   table: str = 'predictions', key_columns: list[str] | None = None) -> None:
-    """Rebase: replace matching rows from experiment into base."""
+    """Rebase: replace matching rows from experiment into base.
+
+    Args:
+        base_db: Path to the base SQLite database.
+        exp_dbs: List of experiment database paths.
+        output_db: Output database path (can be same as base_db for in-place).
+        table: Table name to rebase. Must be a valid SQL identifier.
+        key_columns: Columns forming the composite key for matching. Each must be a valid SQL identifier.
+    """
     _require_duckdb()
+    _validate_identifier(table, 'table')
     if key_columns is None:
         key_columns = ['version']
+    _validate_identifiers(key_columns, 'key column')
 
     if base_db != output_db:
         shutil.copy2(base_db, output_db)
@@ -136,6 +202,11 @@ def merge_parquet(base_path: str, exp_paths: list[str], output_path: str) -> Non
 
     Merge direction: base keeps all its rows, exp rows are appended.
     Schema mismatches are handled by UNION ALL BY NAME (missing columns become NULL).
+
+    Args:
+        base_path: Path to the base parquet file.
+        exp_paths: List of experiment parquet file paths.
+        output_path: Output parquet file path.
     """
     _require_duckdb()
     con = duckdb.connect()
@@ -171,9 +242,47 @@ def rebase_parquet(base_path: str, exp_paths: list[str], output_path: str,
     Rebase direction: experiment rows win. For each composite key, if the key
     exists in any experiment file, the experiment row replaces the base row.
     New columns from experiments are added (base rows get NULL for those columns).
+
+    Args:
+        base_path: Path to the base parquet file.
+        exp_paths: List of experiment parquet file paths.
+        output_path: Output parquet file path.
+        key_columns: Columns forming the composite key. Each must be a valid SQL identifier
+                     and must exist in the parquet schemas.
+
+    Raises:
+        ValueError: If key_columns is empty, contains invalid identifiers, or references
+                    columns not present in the parquet files.
     """
     _require_duckdb()
+    _validate_identifiers(key_columns, 'key column')
+
     con = duckdb.connect()
+
+    # Verify key columns exist in base parquet schema
+    base_cols = set(
+        r[0] for r in con.execute(f"SELECT * FROM read_parquet('{base_path}') LIMIT 0").description
+    )
+    missing_in_base = [k for k in key_columns if k not in base_cols]
+    if missing_in_base:
+        con.close()
+        raise ValueError(
+            f"Key column(s) {missing_in_base} not found in base parquet '{base_path}'. "
+            f"Available columns: {sorted(base_cols)}"
+        )
+
+    # Verify key columns exist in at least the first experiment file
+    if exp_paths:
+        exp_cols = set(
+            r[0] for r in con.execute(f"SELECT * FROM read_parquet('{exp_paths[0]}') LIMIT 0").description
+        )
+        missing_in_exp = [k for k in key_columns if k not in exp_cols]
+        if missing_in_exp:
+            con.close()
+            raise ValueError(
+                f"Key column(s) {missing_in_exp} not found in experiment parquet '{exp_paths[0]}'. "
+                f"Available columns: {sorted(exp_cols)}"
+            )
 
     # Build experiment union (all experiment rows, later ones override earlier)
     exp_union = " UNION ALL BY NAME ".join(

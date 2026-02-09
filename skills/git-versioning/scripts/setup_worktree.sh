@@ -17,16 +17,16 @@ set -euo pipefail
 NAME="${1:?Usage: $0 <experiment-name> [shared-cache-path]}"
 SHARED_CACHE="${2:-}"
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-PARENT="$(dirname "$REPO_ROOT")"
-WORKTREE_PATH="$PARENT/exp-$NAME"
-BRANCH_NAME="exp/$NAME"
-
-# Validate we're in a git repo
+# Validate we're in a git repo (must run before git rev-parse --show-toplevel)
 if ! git rev-parse --git-dir > /dev/null 2>&1; then
     echo "ERROR: Not a git repository"
     exit 1
 fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+PARENT="$(dirname "$REPO_ROOT")"
+WORKTREE_PATH="$PARENT/exp-$NAME"
+BRANCH_NAME="exp/$NAME"
 
 # Check if worktree already exists
 if [ -d "$WORKTREE_PATH" ]; then

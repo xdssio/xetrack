@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -42,6 +43,30 @@ except ImportError:
     duckdb = None
 
 EXPLORE_PREFIX = "explore-"
+
+# Safe SQL identifier pattern: letters, digits, underscores; must start with letter/underscore.
+_SAFE_IDENTIFIER_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+
+
+def _validate_identifier(name: str, label: str = 'identifier') -> str:
+    """Validate that a string is a safe SQL identifier.
+
+    Args:
+        name: The identifier string to validate.
+        label: Human-readable label for error messages.
+
+    Returns:
+        The validated identifier string.
+
+    Raises:
+        ValueError: If the identifier contains unsafe characters.
+    """
+    if not name or not _SAFE_IDENTIFIER_RE.match(name):
+        raise ValueError(
+            f"Invalid SQL {label}: {name!r}. "
+            f"Must match /^[A-Za-z_][A-Za-z0-9_]*$/"
+        )
+    return name
 
 
 # ---------------------------------------------------------------------------
@@ -69,8 +94,17 @@ def _require_duckdb() -> None:
 
 
 def _connect_db(db_path: str, table: str = 'predictions') -> tuple[object, list[str]]:
-    """Connect to a SQLite database via DuckDB and return (connection, columns)."""
+    """Connect to a SQLite database via DuckDB and return (connection, columns).
+
+    Args:
+        db_path: Path to the SQLite database file.
+        table: Table name to read. Validated as a safe SQL identifier.
+
+    Returns:
+        Tuple of (DuckDB connection, list of column names).
+    """
     _require_duckdb()
+    _validate_identifier(table, 'table')
     con = duckdb.connect()
     con.execute("INSTALL sqlite; LOAD sqlite;")
     con.execute(f"ATTACH '{db_path}' AS db (TYPE SQLITE)")
@@ -129,10 +163,12 @@ def cmd_list(args: argparse.Namespace) -> None:
     if not select:
         select = cols[:8]
 
+    # Validate sort column against actual schema (not user-controlled SQL)
     order = 'timestamp DESC'
     if args.sort and args.sort in cols:
         order = f"{args.sort} DESC"
 
+    # Table already validated by _connect_db
     query = f"SELECT {', '.join(select)} FROM db.{args.table} ORDER BY {order}"
     if args.limit:
         query += f" LIMIT {args.limit}"
@@ -161,11 +197,11 @@ def cmd_show(args: argparse.Namespace) -> None:
         con.close()
         sys.exit(1)
 
-    rows = con.execute(f"""
-        SELECT * FROM db.{args.table}
-        WHERE version = '{args.version}'
-        ORDER BY timestamp DESC
-    """).fetchall()
+    # Use parameterized query for user-supplied version value
+    rows = con.execute(
+        f"SELECT * FROM db.{args.table} WHERE version = ? ORDER BY timestamp DESC",
+        [args.version]
+    ).fetchall()
 
     if not rows:
         print(f"No experiments found for version '{args.version}'")
@@ -472,15 +508,16 @@ def cmd_diff(args: argparse.Namespace) -> None:
         con.close()
         sys.exit(1)
 
-    v1_rows = con.execute(f"""
-        SELECT * FROM db.{args.table} WHERE version = '{args.v1}'
-        ORDER BY timestamp DESC LIMIT 1
-    """).fetchall()
+    # Use parameterized queries for user-supplied version values
+    v1_rows = con.execute(
+        f"SELECT * FROM db.{args.table} WHERE version = ? ORDER BY timestamp DESC LIMIT 1",
+        [args.v1]
+    ).fetchall()
 
-    v2_rows = con.execute(f"""
-        SELECT * FROM db.{args.table} WHERE version = '{args.v2}'
-        ORDER BY timestamp DESC LIMIT 1
-    """).fetchall()
+    v2_rows = con.execute(
+        f"SELECT * FROM db.{args.table} WHERE version = ? ORDER BY timestamp DESC LIMIT 1",
+        [args.v2]
+    ).fetchall()
 
     if not v1_rows:
         print(f"No data for version {args.v1}")

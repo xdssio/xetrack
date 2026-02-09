@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -26,6 +27,30 @@ try:
     import duckdb
 except ImportError:
     duckdb = None
+
+# Safe SQL identifier pattern: letters, digits, underscores; must start with letter/underscore.
+_SAFE_IDENTIFIER_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+
+
+def _validate_identifier(name: str, label: str = 'identifier') -> str:
+    """Validate that a string is a safe SQL identifier.
+
+    Args:
+        name: The identifier string to validate.
+        label: Human-readable label for error messages (e.g. 'table', 'column').
+
+    Returns:
+        The validated identifier string (unchanged).
+
+    Raises:
+        ValueError: If the identifier contains unsafe characters.
+    """
+    if not name or not _SAFE_IDENTIFIER_RE.match(name):
+        raise ValueError(
+            f"Invalid SQL {label}: {name!r}. "
+            f"Must match /^[A-Za-z_][A-Za-z0-9_]*$/"
+        )
+    return name
 
 
 def get_git_hash() -> str:
@@ -46,10 +71,21 @@ def get_dvc_hash() -> str:
 
 
 def get_metrics_from_db(db_path: str, version: str, table: str = 'predictions') -> dict[str, str]:
-    """Extract key metrics from xetrack database for the given version."""
+    """Extract key metrics from xetrack database for the given version.
+
+    Args:
+        db_path: Path to the xetrack SQLite database.
+        version: Version string to look up metrics for.
+        table: Table name to query. Must be a valid SQL identifier.
+
+    Returns:
+        Dictionary mapping metric names to their formatted string values.
+    """
     if duckdb is None:
         print("WARNING: duckdb not installed, cannot auto-extract metrics")
         return {}
+
+    _validate_identifier(table, 'table')
 
     con = duckdb.connect()
     con.execute("INSTALL sqlite; LOAD sqlite;")
@@ -59,18 +95,16 @@ def get_metrics_from_db(db_path: str, version: str, table: str = 'predictions') 
     con.execute(f"SELECT * FROM db.{table} LIMIT 0")
     cols = [r[0] for r in con.description]
 
-    # Get the latest row for this version
+    # Get the latest row for this version (parameterized query for version value)
     if 'version' in cols:
-        rows = con.execute(f"""
-            SELECT * FROM db.{table} 
-            WHERE version = '{version}' 
-            ORDER BY timestamp DESC LIMIT 1
-        """).fetchall()
+        rows = con.execute(
+            f"SELECT * FROM db.{table} WHERE version = ? ORDER BY timestamp DESC LIMIT 1",
+            [version]
+        ).fetchall()
     else:
-        rows = con.execute(f"""
-            SELECT * FROM db.{table} 
-            ORDER BY timestamp DESC LIMIT 1
-        """).fetchall()
+        rows = con.execute(
+            f"SELECT * FROM db.{table} ORDER BY timestamp DESC LIMIT 1"
+        ).fetchall()
 
     if not rows:
         return {}

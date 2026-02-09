@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -33,6 +34,30 @@ try:
     import duckdb
 except ImportError:
     duckdb = None
+
+# Safe SQL identifier pattern: letters, digits, underscores; must start with letter/underscore.
+_SAFE_IDENTIFIER_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+
+
+def _validate_identifier(name: str, label: str = 'identifier') -> str:
+    """Validate that a string is a safe SQL identifier.
+
+    Args:
+        name: The identifier string to validate.
+        label: Human-readable label for error messages (e.g. 'table', 'column').
+
+    Returns:
+        The validated identifier string (unchanged).
+
+    Raises:
+        ValueError: If the identifier contains unsafe characters.
+    """
+    if not name or not _SAFE_IDENTIFIER_RE.match(name):
+        raise ValueError(
+            f"Invalid SQL {label}: {name!r}. "
+            f"Must match /^[A-Za-z_][A-Za-z0-9_]*$/"
+        )
+    return name
 
 
 def _require_duckdb() -> None:
@@ -55,26 +80,46 @@ def ensure_dirs() -> None:
 
 def promote_model(db_path: str, run_id: str | None = None, version: str | None = None,
                   metric: str = 'f1_score', table: str = 'predictions') -> None:
-    """Promote a model to production. By run_id, version, or best metric."""
+    """Promote a model to production. By run_id, version, or best metric.
+
+    Args:
+        db_path: Path to the xetrack SQLite database.
+        run_id: Track ID of the specific model to promote.
+        version: Version string to promote (picks best by metric).
+        metric: Metric column to sort by. Must be a valid SQL identifier.
+        table: Table name to query. Must be a valid SQL identifier.
+    """
     _require_duckdb()
+    _validate_identifier(table, 'table')
+    _validate_identifier(metric, 'metric column')
     ensure_dirs()
     con = duckdb.connect()
     con.execute("INSTALL sqlite; LOAD sqlite;")
     con.execute(f"ATTACH '{db_path}' AS db (TYPE SQLITE)")
 
+    # Validate metric column exists in schema
+    con.execute(f"SELECT * FROM db.{table} LIMIT 0")
+    schema_cols = {r[0] for r in con.description}
+    if metric not in schema_cols:
+        con.close()
+        print(f"ERROR: Metric column '{metric}' not found in table '{table}'. "
+              f"Available columns: {sorted(schema_cols)}")
+        sys.exit(1)
+
     if run_id:
-        row = con.execute(f"""
-            SELECT * FROM db.{table} WHERE track_id = '{run_id}' LIMIT 1
-        """).fetchone()
+        row = con.execute(
+            f"SELECT * FROM db.{table} WHERE track_id = ? LIMIT 1",
+            [run_id]
+        ).fetchone()
     elif version:
-        row = con.execute(f"""
-            SELECT * FROM db.{table} WHERE version = '{version}'
-            ORDER BY {metric} DESC LIMIT 1
-        """).fetchone()
+        row = con.execute(
+            f"SELECT * FROM db.{table} WHERE version = ? ORDER BY {metric} DESC LIMIT 1",
+            [version]
+        ).fetchone()
     else:
-        row = con.execute(f"""
-            SELECT * FROM db.{table} ORDER BY {metric} DESC LIMIT 1
-        """).fetchone()
+        row = con.execute(
+            f"SELECT * FROM db.{table} ORDER BY {metric} DESC LIMIT 1"
+        ).fetchone()
 
     if not row:
         print("ERROR: No matching model found")
@@ -157,8 +202,16 @@ def download_model(version: str, output_path: str) -> None:
 
 
 def list_models(db_path: str, table: str = 'predictions', metric: str = 'f1_score') -> None:
-    """List all models with their metrics."""
+    """List all models with their metrics.
+
+    Args:
+        db_path: Path to the xetrack SQLite database.
+        table: Table name to query. Must be a valid SQL identifier.
+        metric: Metric column to sort by. Must be a valid SQL identifier.
+    """
     _require_duckdb()
+    _validate_identifier(table, 'table')
+    _validate_identifier(metric, 'metric column')
     con = duckdb.connect()
     con.execute("INSTALL sqlite; LOAD sqlite;")
     con.execute(f"ATTACH '{db_path}' AS db (TYPE SQLITE)")
@@ -166,7 +219,7 @@ def list_models(db_path: str, table: str = 'predictions', metric: str = 'f1_scor
     con.execute(f"SELECT * FROM db.{table} LIMIT 0")
     cols = [r[0] for r in con.description]
 
-    # Select relevant columns
+    # Select relevant columns (all are from schema, so safe to interpolate)
     select_cols = ['version', 'track_id', 'model', 'timestamp']
     metric_cols = [c for c in cols if any(m in c.lower() for m in
                    ['f1', 'accuracy', 'precision', 'recall', 'loss', 'score'])]
@@ -216,11 +269,29 @@ def list_models(db_path: str, table: str = 'predictions', metric: str = 'f1_scor
 
 def prune_candidates(db_path: str, keep: int = 5, metric: str = 'f1_score',
                      table: str = 'predictions') -> None:
-    """Prune candidates to top-K based on metric."""
+    """Prune candidates to top-K based on metric.
+
+    Args:
+        db_path: Path to the xetrack SQLite database.
+        keep: Number of top candidates to keep.
+        metric: Metric column to rank by. Must be a valid SQL identifier.
+        table: Table name to query. Must be a valid SQL identifier.
+    """
     _require_duckdb()
+    _validate_identifier(table, 'table')
+    _validate_identifier(metric, 'metric column')
     con = duckdb.connect()
     con.execute("INSTALL sqlite; LOAD sqlite;")
     con.execute(f"ATTACH '{db_path}' AS db (TYPE SQLITE)")
+
+    # Validate metric column exists in schema
+    con.execute(f"SELECT * FROM db.{table} LIMIT 0")
+    schema_cols = {r[0] for r in con.description}
+    if metric not in schema_cols:
+        con.close()
+        print(f"ERROR: Metric column '{metric}' not found in table '{table}'. "
+              f"Available columns: {sorted(schema_cols)}")
+        sys.exit(1)
 
     # Get ranked models
     results = con.execute(f"""
@@ -249,7 +320,12 @@ def prune_candidates(db_path: str, keep: int = 5, metric: str = 'f1_score',
 
 
 def show_info(db_path: str, table: str = 'predictions') -> None:
-    """Show info about current production model."""
+    """Show info about current production model.
+
+    Args:
+        db_path: Path to the xetrack SQLite database.
+        table: Table name to query. Must be a valid SQL identifier.
+    """
     if not os.path.exists(PRODUCTION_MODEL):
         print("No production model found.")
         return
@@ -272,6 +348,7 @@ def show_info(db_path: str, table: str = 'predictions') -> None:
     # Get DB stats
     if db_path and os.path.exists(db_path):
         _require_duckdb()
+        _validate_identifier(table, 'table')
         con = duckdb.connect()
         con.execute("INSTALL sqlite; LOAD sqlite;")
         con.execute(f"ATTACH '{db_path}' AS db (TYPE SQLITE)")
