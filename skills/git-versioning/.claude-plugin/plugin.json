@@ -1,0 +1,24 @@
+{
+  "name": "git-versioning",
+  "version": "0.5.1",
+  "description": "ML experiment versioning using Git + DVC + xetrack + DuckDB. Guides sequential, parallel, and worktree-based experiment workflows with merge/rebase semantics.",
+  "author": {
+    "name": "XDSS"
+  },
+  "homepage": "https://github.com/xdssio/xetrack",
+  "repository": "https://github.com/xdssio/xetrack",
+  "license": "MIT",
+  "category": "ml-tools",
+  "keywords": [
+    "git",
+    "dvc",
+    "versioning",
+    "experiments",
+    "worktree",
+    "merge",
+    "rebase",
+    "xetrack",
+    "ml-ops",
+    "reproducibility"
+  ]
+}

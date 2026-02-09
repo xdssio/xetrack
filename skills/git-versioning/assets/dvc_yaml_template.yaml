@@ -1,0 +1,62 @@
+# dvc.yaml template for ML experiment versioning
+# Copy this to your project root and customize
+
+stages:
+  # Training stage
+  train:
+    cmd: python train.py --config params.yaml
+    deps:
+      - train.py
+      - data/train.parquet
+      - data/test.parquet
+    params:
+      - model.name
+      - model.learning_rate
+      - model.batch_size
+      - model.epochs
+    outs:
+      - models/production/model.bin
+    metrics:
+      - results/metrics.json:
+          cache: false
+
+  # Merge/rebase stage for combining experiment results
+  # Use after worktree experiments or when combining databases
+  merge_results:
+    cmd: >-
+      python scripts/merge_artifacts.py
+      --strategy ${merge.strategy}
+      --base-db results/experiments.db
+      --exp-db results/incoming.db
+      --output-db results/experiments.db
+      --table ${merge.table}
+      --key-columns ${merge.key_columns}
+    deps:
+      - scripts/merge_artifacts.py
+      - results/incoming.db
+    params:
+      - merge.strategy
+      - merge.table
+      - merge.key_columns
+    outs:
+      - results/experiments.db:
+          persist: true  # Don't delete before re-running (we append)
+
+  # Optional: merge data files
+  merge_data:
+    cmd: >-
+      python scripts/merge_artifacts.py
+      --strategy ${merge.data_strategy}
+      --base-data data/train.parquet
+      --exp-data data/incoming_train.parquet
+      --output-data data/train.parquet
+      --key-columns ${merge.data_key_columns}
+    deps:
+      - scripts/merge_artifacts.py
+      - data/incoming_train.parquet
+    params:
+      - merge.data_strategy
+      - merge.data_key_columns
+    outs:
+      - data/train.parquet:
+          persist: true

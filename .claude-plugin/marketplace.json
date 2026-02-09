@@ -30,6 +30,29 @@
         "ml-ops",
         "data-science"
       ]
+    },
+    {
+      "name": "git-versioning",
+      "source": "./skills/git-versioning",
+      "description": "ML experiment versioning with Git + DVC + xetrack. Manage sequential/parallel/worktree workflows, merge/rebase experiment artifacts, model promotion, and experiment exploration",
+      "version": "0.5.2",
+      "author": {
+        "name": "XDSS"
+      },
+      "homepage": "https://github.com/xdssio/xetrack",
+      "repository": "https://github.com/xdssio/xetrack",
+      "license": "MIT",
+      "category": "ml-tools",
+      "keywords": [
+        "versioning",
+        "dvc",
+        "git",
+        "experiments",
+        "tracking",
+        "xetrack",
+        "ml-ops",
+        "reproducibility"
+      ]
     }
   ]
 }

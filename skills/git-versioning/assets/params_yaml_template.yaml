@@ -1,0 +1,28 @@
+# params.yaml template for ML experiment versioning
+# Copy this to your project root and customize
+
+# Model parameters
+model:
+  name: bert-base
+  learning_rate: 0.0001
+  batch_size: 32
+  epochs: 10
+  dropout: 0.1
+
+# Merge/rebase configuration
+# Change these when combining experiment results
+merge:
+  # For results database: "merge" (append all) or "rebase" (replace matching)
+  strategy: merge
+  table: events
+  key_columns: version
+
+  # For data files: can differ from DB strategy
+  data_strategy: merge
+  data_key_columns: id
+
+# Experiment metadata (updated per experiment)
+experiment:
+  version: e0.1.0
+  description: "baseline experiment"
+  author: ""
