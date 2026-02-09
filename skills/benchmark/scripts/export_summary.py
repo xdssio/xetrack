@@ -8,11 +8,73 @@ Usage:
 
 import sys
 import argparse
+import warnings
 from pathlib import Path
 from datetime import datetime
 
-def export_summary(db_path: str, table: str = "events", engine: str = "duckdb"):
-    """Generate markdown summary of benchmark results."""
+
+def _resolve_table(db_path: str, table: str, engine: str) -> str:
+    """Resolve table name, falling back to legacy 'events' if needed.
+
+    If the requested table is 'predictions' and it doesn't exist but 'events' does,
+    falls back to 'events' with a deprecation warning.
+
+    Args:
+        db_path: Path to the database file.
+        table: Requested table name.
+        engine: Database engine ('sqlite' or 'duckdb').
+
+    Returns:
+        The resolved table name to use.
+    """
+    if table != "predictions":
+        return table
+
+    # Check if 'predictions' table exists; if not, try 'events' fallback
+    try:
+        if engine == "duckdb":
+            import duckdb
+            con = duckdb.connect()
+            con.execute("INSTALL sqlite; LOAD sqlite;")
+            con.execute(f"ATTACH '{db_path}' AS db (TYPE SQLITE)")
+            tables = [
+                r[0] for r in con.execute(
+                    "SELECT name FROM db.sqlite_master WHERE type='table'"
+                ).fetchall()
+            ]
+            con.close()
+        else:
+            import sqlite3
+            con = sqlite3.connect(db_path)
+            tables = [
+                r[0] for r in con.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            ]
+            con.close()
+
+        if "predictions" not in tables and "events" in tables:
+            warnings.warn(
+                "Table 'predictions' not found but legacy 'events' table exists. "
+                "Falling back to 'events'. Please rename your table to 'predictions'.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            return "events"
+    except Exception:
+        pass  # If we can't check, let the Reader handle the error
+
+    return table
+
+
+def export_summary(db_path: str, table: str = "predictions", engine: str = "duckdb"):
+    """Generate markdown summary of benchmark results.
+
+    Args:
+        db_path: Path to the database file.
+        table: Table name (default: 'predictions'). Falls back to 'events' if needed.
+        engine: Database engine ('sqlite' or 'duckdb').
+    """
     try:
         from xetrack import Reader
         import pandas as pd
@@ -23,6 +85,9 @@ def export_summary(db_path: str, table: str = "events", engine: str = "duckdb"):
     if not Path(db_path).exists():
         print(f"❌ Error: Database not found: {db_path}", file=sys.stderr)
         sys.exit(1)
+
+    # Resolve table name with legacy fallback
+    table = _resolve_table(db_path, table, engine)
 
     # Read data
     reader = Reader(db=db_path, engine=engine, table=table)  # type: ignore
@@ -134,7 +199,7 @@ def export_summary(db_path: str, table: str = "events", engine: str = "duckdb"):
 def main():
     parser = argparse.ArgumentParser(description="Export benchmark summary as markdown")
     parser.add_argument("db_path", help="Path to database file")
-    parser.add_argument("table", nargs="?", default="events", help="Table name (default: events)")
+    parser.add_argument("table", nargs="?", default="predictions", help="Table name (default: predictions)")
     parser.add_argument("--engine", default="duckdb", choices=["sqlite", "duckdb"],
                        help="Database engine (default: duckdb)")
 

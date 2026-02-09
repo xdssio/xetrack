@@ -621,7 +621,7 @@ Run drift analysis and outlier detection on your logs:
 ### ML Tracking
 
 ```python
-tracker.logger.experiemnt(<model evaluation and params>) # -> prettily write to logs
+tracker.logger.experiment(<model evaluation and params>) # -> prettily write to logs
 
 df = Reader.read_logs(path='logs')
 """
@@ -647,7 +647,7 @@ $ xt tail database.db --n=1
 |---:|:---------------------------|:----------------|:---------|-----------:|:-------|:-----------------|
 |  0 | 2023-12-27 11:37:30.627189 | ebony-loon-6720 | lightgbm |        0.9 | mnist  | 1b5b2294fc521d12 |
 
-$ xet set accuracy 0.8 --where-key params --where-value 1b5b2294fc521d12 --track-id ebony-loon-6720
+$ xt set database.db accuracy 0.8 --where-key params --where-value 1b5b2294fc521d12 --track-id ebony-loon-6720
 
 $ xt delete database.db ebony-loon-6720 # delete experiments with a given track_id
 
@@ -666,7 +666,7 @@ $ xt copy source.db target.db --assets/--no-assets --table=<table>
 
 
 # Stats
-$ xt describe database.db --columns=x,y,z
+$ xt stats describe database.db --columns=x,y,z
 
 $ xt stats top/bottom database.db x # print the entry with the top/bottom result of a value
 
@@ -737,6 +737,9 @@ The benchmark skill is an AI agent guide that helps you:
 - **Version experiments** with git tags and DVC
 - **Avoid common pitfalls** (multiprocessing issues, cache problems, etc.)
 
+> The 7-phase workflow is **genuinely well-structured**. The "design end-to-start" principle and single-execution principle are real insights that save people from common mistakes [...] The two-table pattern [...] is a concrete, opinionated design that **eliminates decision paralysis** [...] 8+ pitfalls discovered through actual simulations — **this is rare and valuable**. Most skills are written from theory; yours was battle-tested with real databases [...] The engine decision matrix [...] with multiprocessing gotchas is **genuinely useful** — this is a pitfall that costs hours to debug [...] Validation scripts [...] are actionable — they produce real recommendations, not just data [...] Scripts are functional, not just documentation [...] The experiment explorer [...] is a serious tool — auto-detection of retrieval strategy [...] side-by-side diff, disposable worktrees for exploration [...] The model manager with the candidates pattern **solves a real organizational problem** [...] The artifact merger using DuckDB for schema-flexible merges is clever [...] The 14 use cases [...] are concrete and map directly to real workflow decisions [...] The workflow decision matrix is **the killer feature** — exactly the kind of decision that's hard to make and easy to get wrong [...] The merge vs rebase semantics for each artifact type is **genuinely novel**; nobody has codified this for ML experiments before [...] The two skills complement each other perfectly — one runs experiments, the other versions them [...] Safety checklists [...] prevent data loss [...] Deep DuckDB integration for analysis is a differentiator [...] Local-first philosophy means **zero infrastructure to start**.
+>
+> — Claude, on first review of the benchmark & git-versioning skills
 
 ## Installation
 
@@ -790,6 +793,7 @@ Once installed, simply ask Claude to help with benchmarking:
 
 Claude will automatically use the benchmark skill and guide you through:
 
+0. **Phase 0**: Planning what to track (ideation)
 1. **Phase 1**: Understanding your goals and designing the experiment
 2. **Phase 2**: Building a robust single-execution function
 3. **Phase 3**: Adding caching for efficiency
@@ -921,12 +925,12 @@ Full documentation is in the skill itself:
 **"Database is locked" errors with DuckDB:**
 - **Cause**: DuckDB doesn't handle concurrent writes from multiple processes
 - **Solution**: Switch to SQLite engine if using multiprocessing
-- **Details**: See SKILL.md Pitfall #2 for full explanation
+- **Details**: See `references/build-and-cache.md` Pitfall 2 for full explanation
 
 **Cache not working:**
 - **Check installation**: Ensure `pip install xetrack[cache]` was run
 - **Check dataclass**: Must be frozen: `@dataclass(frozen=True, slots=True)`
-- **Float parameters**: Need rounding for consistent hashing (see SKILL.md Pitfall #6)
+- **Float parameters**: Need rounding for consistent hashing (see `references/build-and-cache.md` Pitfall 6)
 - **Verify cache directory**: Check that cache path is writable
 
 **Import errors:**
@@ -938,10 +942,89 @@ Full documentation is in the skill itself:
 **"Dataclass not unpacking" issues:**
 - **Check method**: Auto-unpacking only works with `.track()`, not `.log()`
 - **Verify frozen**: Dataclass must have `frozen=True`
-- **See SKILL.md**: Pitfall #3 for detailed explanation
+- **See `references/build-and-cache.md`**: Pitfall 1 for detailed explanation
+
+## Git Versioning Skill
+
+The **git-versioning** skill is a companion to the benchmark skill. While the benchmark skill runs experiments, the git-versioning skill handles versioning, merging, and retrieval of experiment artifacts.
+
+### When to Use
+
+Use the git-versioning skill when you need to:
+- Version experiments with git tags and DVC
+- Merge or rebase experiment results across branches
+- Promote models from candidates to production
+- Set up parallel experiments with git worktrees
+- Retrieve models or data from past experiments
+- Compare historical experiments side by side
+
+### Installation
+
+```bash
+# Plugin marketplace
+/plugin install git-versioning@xetrack
+
+# Manual
+cp -r xetrack/skills/git-versioning ~/.claude/skills/git-versioning
+```
+
+### Core Concepts
+
+**Workflow selection** — The skill helps you choose the right approach:
+
+| Scenario | Workflow | DB Engine | Branching |
+|----------|---------|-----------|-----------|
+| Single experiment | Sequential | SQLite | Main branch |
+| Param sweep, same code/data | Parallel | DuckDB | Main branch |
+| Different code or data per exp | Worktree | SQLite | Branch per exp |
+
+**Merge vs Rebase** — A novel decision framework for ML artifacts:
+- **Databases**: Merge (append rows) vs Rebase (replace when schema changed)
+- **Data files**: Merge (add samples) vs Rebase (preprocessing overhaul)
+- **Models**: Merge (keep as candidate) vs Rebase (promote to production)
+
+**Candidates pattern** — Keep models organized:
+- `models/production/model.bin` — current best (DVC tracked)
+- `models/candidates/` — runner-ups for A/B tests and ensembles
+
+### Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `setup_worktree.sh` | Create worktree with shared DVC cache (prevents the #1 pitfall) |
+| `experiment_explorer.py` | Browse, compare, and retrieve past experiments |
+| `merge_artifacts.py` | DuckDB-powered merge/rebase for databases and parquet files |
+| `version_tag.py` | Create annotated tags with metric descriptions |
+| `model_manager.py` | Promote/prune models, manage candidates |
+
+### Example Prompts
+
+```
+"Help me version my experiment and create a git tag"
+
+"Set up parallel experiments using git worktrees"
+
+"Merge results from my experiment branch back to main"
+
+"Retrieve the model from experiment e0.2.0"
+
+"Compare experiments e0.1.0 and e0.2.0 side by side"
+```
+
+### How the Skills Work Together
+
+```
+Benchmark Skill                    Git Versioning Skill
+─────────────────                  ──────────────────────
+Phase 0-3: Design & Build    →    (not needed yet)
+Phase 4-5: Run experiments   →    Choose workflow (sequential/parallel/worktree)
+Phase 6-7: Validate & Analyze →   Tag experiment, push artifacts
+                                   Merge results, promote models
+                                   Explore & compare past experiments
+```
 
 ## Contributing
 
-Found an issue or want to improve the skill? Please open an issue or PR!
+Found an issue or want to improve the skills? Please open an issue or PR!
 
-The skill was developed by running real simulations and discovering pitfalls, so real-world feedback is valuable.
+The skills were developed by running real simulations and discovering pitfalls, so real-world feedback is valuable.
