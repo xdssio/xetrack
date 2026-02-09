@@ -577,7 +577,7 @@ Examples:
     # list
     p = subparsers.add_parser('list', help='List experiments with key metrics')
     p.add_argument('--db', required=True, help='xetrack SQLite database path')
-    p.add_argument('--table', default='predictions', help='Table name (default: events)')
+    p.add_argument('--table', default='predictions', help='Table name (default: predictions)')
     p.add_argument('--sort', help='Column to sort by (descending)')
     p.add_argument('--limit', type=int, default=20, help='Max results (default: 20)')
 

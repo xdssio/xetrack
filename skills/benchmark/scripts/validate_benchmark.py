@@ -14,7 +14,7 @@ import sys
 import argparse
 from pathlib import Path
 
-def validate_benchmark(db_path: str, table: str = "events", engine: str = "duckdb"):
+def validate_benchmark(db_path: str, table: str = "predictions", engine: str = "duckdb"):
     """Run validation checks on benchmark database."""
     try:
         from xetrack import Reader
@@ -158,7 +158,7 @@ def validate_benchmark(db_path: str, table: str = "events", engine: str = "duckd
 def main():
     parser = argparse.ArgumentParser(description="Validate benchmark database")
     parser.add_argument("db_path", help="Path to database file")
-    parser.add_argument("table", nargs="?", default="events", help="Table name (default: events)")
+    parser.add_argument("table", nargs="?", default="predictions", help="Table name (default: predictions)")
     parser.add_argument("--engine", default="duckdb", choices=["sqlite", "duckdb"],
                        help="Database engine (default: duckdb)")
 

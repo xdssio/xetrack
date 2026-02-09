@@ -11,7 +11,7 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
-def export_summary(db_path: str, table: str = "events", engine: str = "duckdb"):
+def export_summary(db_path: str, table: str = "predictions", engine: str = "duckdb"):
     """Generate markdown summary of benchmark results."""
     try:
         from xetrack import Reader
@@ -134,7 +134,7 @@ def export_summary(db_path: str, table: str = "events", engine: str = "duckdb"):
 def main():
     parser = argparse.ArgumentParser(description="Export benchmark summary as markdown")
     parser.add_argument("db_path", help="Path to database file")
-    parser.add_argument("table", nargs="?", default="events", help="Table name (default: events)")
+    parser.add_argument("table", nargs="?", default="predictions", help="Table name (default: predictions)")
     parser.add_argument("--engine", default="duckdb", choices=["sqlite", "duckdb"],
                        help="Database engine (default: duckdb)")
 

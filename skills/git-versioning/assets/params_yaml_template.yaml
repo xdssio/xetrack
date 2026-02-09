@@ -14,7 +14,7 @@ model:
 merge:
   # For results database: "merge" (append all) or "rebase" (replace matching)
   strategy: merge
-  table: events
+  table: predictions
   key_columns: version
 
   # For data files: can differ from DB strategy
