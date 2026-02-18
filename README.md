@@ -372,6 +372,48 @@ for key, cached_data in Reader.scan_cache('cache_dir'):
 - **API Calls**: Cache external API responses (with appropriate TTL considerations)
 - **Scientific Computing**: Cache results of long-running simulations
 
+### Force Cache Refresh
+
+Use `cache_force=True` to skip the cache lookup and re-execute the function. The new result overwrites the existing cache entry:
+
+```python
+# Normal call — uses cache if available
+result = tracker.track(expensive_computation, args=[2, 10])
+
+# Force refresh — re-executes the function and overwrites the cache
+result = tracker.track(expensive_computation, args=[2, 10], cache_force=True)
+
+# Next normal call will use the refreshed cache entry
+result = tracker.track(expensive_computation, args=[2, 10])  # Cache hit (from force-refreshed entry)
+```
+
+**When to use `cache_force`:**
+- Model or data changed but function signature is the same
+- Cached result might be stale or corrupted
+- You want to re-run a specific computation without clearing the entire cache
+
+### Delete Cache Entries
+
+Remove all cache entries associated with a specific experiment run:
+
+```python
+from xetrack import Reader
+
+# Delete all cache entries produced by a specific track_id
+deleted = Reader.delete_cache_by_track_id('cache_dir', 'cool-name-1234')
+print(f"Deleted {deleted} cache entries")
+```
+
+**CLI:**
+
+```bash
+# List all cache entries with their track_id lineage
+xt cache ls cache_dir
+
+# Delete cache entries by track_id
+xt cache delete cache_dir cool-name-1234
+```
+
 ### Important Notes
 
 - **Cache keys** are generated from tuples of (function name, args, kwargs, **tracker params**)
@@ -650,6 +692,10 @@ $ xt tail database.db --n=1
 $ xt set database.db accuracy 0.8 --where-key params --where-value 1b5b2294fc521d12 --track-id ebony-loon-6720
 
 $ xt delete database.db ebony-loon-6720 # delete experiments with a given track_id
+
+# Cache management
+$ xt cache ls cache_dir                         # list cache entries with track_id lineage
+$ xt cache delete cache_dir cool-name-1234      # delete cache entries for a specific run
 
 # run any other SQL in a oneliner
 $ xt sql database.db "SELECT * FROM db.events;"

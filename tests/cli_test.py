@@ -243,6 +243,109 @@ def test_cli_assets_ls():
     result.exit_code == 0
 
 
+def test_cli_cache_ls():
+    """Test xt cache ls lists entries with track_id lineage."""
+    tempdir = TemporaryDirectory()
+    db_path = f'{tempdir.name}/db.db'
+    cache_path = f'{tempdir.name}/cache'
+
+    tracker = Tracker(db=db_path, cache=cache_path)
+
+    def add(a: int, b: int) -> int:
+        return a + b
+
+    tracker.track(add, args=[1, 2])
+    tracker.track(add, args=[3, 4])
+
+    result = runner.invoke(app, args=['cache', 'ls', cache_path])
+    assert result.exit_code == 0
+    assert 'track_id' in result.output
+    assert tracker.track_id in result.output
+    tempdir.cleanup()
+
+
+def test_cli_cache_ls_empty():
+    """Test xt cache ls on empty cache."""
+    tempdir = TemporaryDirectory()
+    cache_path = f'{tempdir.name}/cache'
+
+    # Create empty cache dir
+    from diskcache import Cache
+    Cache(cache_path).close()
+
+    result = runner.invoke(app, args=['cache', 'ls', cache_path])
+    assert result.exit_code == 0
+    assert 'empty' in result.output.lower()
+    tempdir.cleanup()
+
+
+def test_cli_cache_delete():
+    """Test xt cache delete removes entries for a specific track_id."""
+    tempdir = TemporaryDirectory()
+    db_path = f'{tempdir.name}/db.db'
+    cache_path = f'{tempdir.name}/cache'
+
+    tracker = Tracker(db=db_path, cache=cache_path)
+
+    def mul(a: int, b: int) -> int:
+        return a * b
+
+    def div(a: int, b: int) -> float:
+        return a / b
+
+    # Cache two functions under same track_id
+    tracker.track(mul, args=[2, 3])
+    tracker.track(div, args=[10, 2])
+
+    # Verify 2 entries exist
+    entries = list(Reader.scan_cache(cache_path))
+    assert len(entries) == 2
+
+    # Delete via CLI
+    result = runner.invoke(app, args=['cache', 'delete', cache_path, tracker.track_id])
+    assert result.exit_code == 0
+    assert 'Deleted 2' in result.output
+
+    # Verify cache is empty
+    entries_after = list(Reader.scan_cache(cache_path))
+    assert len(entries_after) == 0
+    tempdir.cleanup()
+
+
+def test_cli_cache_delete_partial():
+    """Test xt cache delete only removes entries for the specified track_id."""
+    tempdir = TemporaryDirectory()
+    db_path = f'{tempdir.name}/db.db'
+    cache_path = f'{tempdir.name}/cache'
+
+    tracker = Tracker(db=db_path, cache=cache_path)
+    first_id = tracker.track_id
+
+    def compute(x: int) -> int:
+        return x * 2
+
+    # Cache under first track_id
+    tracker.track(compute, args=[5])
+
+    # Switch track_id, cache different args
+    tracker.track_id = Tracker.generate_track_id()
+    second_id = tracker.track_id
+    tracker.track(compute, args=[10])
+
+    assert len(list(Reader.scan_cache(cache_path))) == 2
+
+    # Delete only first
+    result = runner.invoke(app, args=['cache', 'delete', cache_path, first_id])
+    assert result.exit_code == 0
+    assert 'Deleted 1' in result.output
+
+    # Second should remain
+    remaining = list(Reader.scan_cache(cache_path))
+    assert len(remaining) == 1
+    assert remaining[0][1]["cache"] == second_id
+    tempdir.cleanup()
+
+
 def test_cli_bashplotlib():
     database = NamedTemporaryFile().name
     Tracker(db=database, params={"model": 'lightgbm'}).log({"accuracy": 0.9, 'x': 1.0, 'y': 2.0})

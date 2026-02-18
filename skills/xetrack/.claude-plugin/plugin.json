@@ -1,0 +1,23 @@
+{
+  "name": "xetrack",
+  "version": "0.5.2",
+  "description": "API reference and usage guide for xetrack — lightweight experiment tracking with SQLite/DuckDB",
+  "author": {
+    "name": "XDSS"
+  },
+  "homepage": "https://github.com/xdssio/xetrack",
+  "repository": "https://github.com/xdssio/xetrack",
+  "license": "MIT",
+  "keywords": [
+    "xetrack",
+    "tracker",
+    "reader",
+    "experiment-tracking",
+    "sqlite",
+    "duckdb",
+    "caching",
+    "diskcache",
+    "cli",
+    "api-reference"
+  ]
+}

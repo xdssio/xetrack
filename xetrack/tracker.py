@@ -664,6 +664,7 @@ class Tracker:
         params: Optional[Dict[str, Any]] = None,
         args: Optional[List[Any]] = None,
         kwargs: Optional[Dict[str, Any]] = None,
+        cache_force: bool = False,
     ):
         """
         Executes a function and logs the execution data.
@@ -675,6 +676,7 @@ class Tracker:
             params (dict, optional): Additional parameters to log along with the execution data. Defaults to None.
             args (list, optional): Positional arguments to pass to the function. Defaults to None.
             kwargs (dict, optional): Keyword arguments to pass to the function. Defaults to None.
+            cache_force (bool): If True, skip cache lookup and re-execute the function, overwriting the cached result. Defaults to False.
 
         Returns:
             Any: The return value of the executed function.
@@ -691,9 +693,9 @@ class Tracker:
         cache_key = None
         if self.cache is not None:
             cache_key = self._generate_cache_key(func, args, kwargs, params)
-            if cache_key is not None and cache_key in self.cache:
+            if cache_key is not None and not cache_force and cache_key in self.cache:
                 cached_data = self.cache[cache_key]
-                # Log cache hit
+                # Log cache hit with the same result data as a normal execution
                 data = {
                     "function_name": func.__name__,
                     "args": str(list(args)),
@@ -702,6 +704,7 @@ class Tracker:
                     "error": "",
                     "function_time": 0.0,
                 }
+                data = self.validate_result(data, cached_data["result"])
                 data.update(params)
                 self.log(data)
                 return cached_data["result"]

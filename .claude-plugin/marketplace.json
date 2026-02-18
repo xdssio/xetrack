@@ -53,6 +53,30 @@
         "ml-ops",
         "reproducibility"
       ]
+    },
+    {
+      "name": "xetrack",
+      "source": "./skills/xetrack",
+      "description": "API reference and usage guide for xetrack — lightweight experiment tracking with SQLite/DuckDB. Covers Tracker, Reader, caching, CLI, and common patterns.",
+      "version": "0.5.2",
+      "author": {
+        "name": "XDSS"
+      },
+      "homepage": "https://github.com/xdssio/xetrack",
+      "repository": "https://github.com/xdssio/xetrack",
+      "license": "MIT",
+      "category": "ml-tools",
+      "keywords": [
+        "xetrack",
+        "tracker",
+        "reader",
+        "api-reference",
+        "experiment-tracking",
+        "caching",
+        "sqlite",
+        "duckdb",
+        "cli"
+      ]
     }
   ]
 }
