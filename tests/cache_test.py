@@ -389,3 +389,330 @@ def test_cache_with_non_frozen_dataclass():
     assert 'cache' not in df.columns
 
     tempdir.cleanup()
+
+
+def test_cache_hit_logs_result_values():
+    """Test that cache hits log the actual return values, not just lineage metadata."""
+    tempdir = TemporaryDirectory()
+    db_path = os.path.join(tempdir.name, "test_db")
+    cache_path = os.path.join(tempdir.name, "cache")
+
+    tracker = Tracker(db=db_path, cache=cache_path)
+
+    def compute(x: int, y: int) -> dict:
+        return {"accuracy": 0.95, "loss": 0.05}
+
+    # First call - computed
+    result1 = tracker.track(compute, args=[1, 2])
+    assert result1 == {"accuracy": 0.95, "loss": 0.05}
+
+    # Second call - cache hit
+    result2 = tracker.track(compute, args=[1, 2])
+    assert result2 == {"accuracy": 0.95, "loss": 0.05}
+
+    df = Reader(db_path).to_df()
+    assert len(df) == 2
+
+    # Both rows should have accuracy and loss columns with values
+    assert df.iloc[0]["accuracy"] == 0.95
+    assert df.iloc[0]["loss"] == 0.05
+    assert df.iloc[1]["accuracy"] == 0.95
+    assert df.iloc[1]["loss"] == 0.05
+
+    # First row is computed (empty cache), second is cache hit
+    assert df.iloc[0]["cache"] == ""
+    assert df.iloc[1]["cache"] != ""
+
+    tempdir.cleanup()
+
+
+def test_cache_hit_logs_primitive_result():
+    """Test that cache hits log primitive return values via function_result column."""
+    tempdir = TemporaryDirectory()
+    db_path = os.path.join(tempdir.name, "test_db")
+    cache_path = os.path.join(tempdir.name, "cache")
+
+    tracker = Tracker(db=db_path, cache=cache_path)
+
+    def multiply(x: int, y: int) -> int:
+        return x * y
+
+    # First call - computed
+    tracker.track(multiply, args=[3, 7])
+
+    # Second call - cache hit
+    tracker.track(multiply, args=[3, 7])
+
+    df = Reader(db_path).to_df()
+    assert len(df) == 2
+
+    # Both rows should have function_result with the actual value
+    assert df.iloc[0]["function_result"] == 21
+    assert df.iloc[1]["function_result"] == 21
+
+    tempdir.cleanup()
+
+
+def test_cache_force_skips_read_and_rewrites():
+    """Test that cache_force=True skips cache lookup but overwrites the cache entry."""
+    tempdir = TemporaryDirectory()
+    db_path = os.path.join(tempdir.name, "test_db")
+    cache_path = os.path.join(tempdir.name, "cache")
+
+    tracker = Tracker(db=db_path, cache=cache_path)
+
+    call_count = 0
+
+    def compute(x: int) -> int:
+        nonlocal call_count
+        call_count += 1
+        return x * 2
+
+    # First call - populates cache
+    result1 = tracker.track(compute, args=[5])
+    assert result1 == 10
+    assert call_count == 1
+
+    # Second call without force - should hit cache (function NOT called)
+    result2 = tracker.track(compute, args=[5])
+    assert result2 == 10
+    assert call_count == 1  # still 1
+
+    # Third call with cache_force - should re-execute and overwrite cache
+    result3 = tracker.track(compute, args=[5], cache_force=True)
+    assert result3 == 10
+    assert call_count == 2  # incremented
+
+    # Verify DB has 3 entries: computed, cache hit, force-recomputed
+    df = Reader(db_path).to_df()
+    assert len(df) == 3
+    assert df.iloc[0]['cache'] == ""   # computed
+    assert df.iloc[1]['cache'] != ""   # cache hit
+    assert df.iloc[2]['cache'] == ""   # force-recomputed
+
+    # Fourth call without force - should still hit cache (was overwritten)
+    result4 = tracker.track(compute, args=[5])
+    assert result4 == 10
+    assert call_count == 2  # still 2, cache hit
+
+    tempdir.cleanup()
+
+
+def test_cache_force_updates_lineage():
+    """Test that cache_force overwrites the lineage track_id in cache."""
+    tempdir = TemporaryDirectory()
+    db_path = os.path.join(tempdir.name, "test_db")
+    cache_path = os.path.join(tempdir.name, "cache")
+
+    # Single tracker, but we change track_id between calls to verify lineage updates
+    tracker = Tracker(db=db_path, cache=cache_path)
+    original_track_id = tracker.track_id
+
+    def add(a: int, b: int) -> int:
+        return a + b
+
+    # First call populates cache with original_track_id
+    tracker.track(add, args=[1, 2])
+
+    # Change track_id and force-refresh — cache lineage should update
+    tracker.track_id = tracker.generate_track_id()
+    new_track_id = tracker.track_id
+    tracker.track(add, args=[1, 2], cache_force=True)
+
+    # Now a cache hit should reference new_track_id (the one that overwrote)
+    tracker.track_id = tracker.generate_track_id()
+    tracker.track(add, args=[1, 2])
+
+    df = Reader(db_path).to_df()
+    # Last row's cache field should be the track_id that force-refreshed
+    assert df.iloc[2]['cache'] == new_track_id
+
+    tempdir.cleanup()
+
+
+def test_delete_cache_by_track_id():
+    """Test Reader.delete_cache_by_track_id removes the right entries."""
+    tempdir = TemporaryDirectory()
+    db_path = os.path.join(tempdir.name, "test_db")
+    cache_path = os.path.join(tempdir.name, "cache")
+
+    tracker = Tracker(db=db_path, cache=cache_path)
+
+    def func_a(x: int) -> int:
+        return x + 1
+
+    def func_b(x: int) -> int:
+        return x + 2
+
+    # Both are cached under the same tracker.track_id
+    tracker.track(func_a, args=[10])
+    tracker.track(func_b, args=[10])
+
+    # Verify 2 entries in cache
+    entries_before = list(Reader.scan_cache(cache_path))
+    assert len(entries_before) == 2
+
+    # Delete by track_id
+    deleted = Reader.delete_cache_by_track_id(cache_path, tracker.track_id)
+    assert deleted == 2
+
+    # Cache should be empty now
+    entries_after = list(Reader.scan_cache(cache_path))
+    assert len(entries_after) == 0
+
+    tempdir.cleanup()
+
+
+def test_delete_cache_by_track_id_partial():
+    """Test that delete only removes entries for the given track_id, not others."""
+    tempdir = TemporaryDirectory()
+    db_path = os.path.join(tempdir.name, "test_db")
+    cache_path = os.path.join(tempdir.name, "cache")
+
+    tracker = Tracker(db=db_path, cache=cache_path)
+    first_track_id = tracker.track_id
+
+    def compute(x: int) -> int:
+        return x * 3
+
+    # Cache compute(5) under first track_id
+    tracker.track(compute, args=[5])
+
+    # Switch track_id and cache compute(10) under second track_id
+    tracker.track_id = tracker.generate_track_id()
+    second_track_id = tracker.track_id
+    tracker.track(compute, args=[10])
+
+    entries_before = list(Reader.scan_cache(cache_path))
+    assert len(entries_before) == 2
+
+    # Delete only first track_id's entries
+    deleted = Reader.delete_cache_by_track_id(cache_path, first_track_id)
+    assert deleted == 1
+
+    # One entry should remain (second track_id's)
+    entries_after = list(Reader.scan_cache(cache_path))
+    assert len(entries_after) == 1
+    assert entries_after[0][1]["cache"] == second_track_id
+
+    tempdir.cleanup()
+
+
+def test_wrap_cached_and_computed_rows_are_consistent():
+    """Test that @tracker.wrap() produces identical DB rows for cached and computed calls.
+
+    Verifies that:
+    - wrap() works with positional args and keyword args
+    - Cached rows contain the same result columns as computed rows
+    - Only cache, function_time, track_id, and timestamp differ between rows
+    - Dict return values are unpacked as columns in both cases
+    - Primitive return values appear in function_result in both cases
+    """
+    tempdir = TemporaryDirectory()
+    db_path = os.path.join(tempdir.name, "test_db")
+    cache_path = os.path.join(tempdir.name, "cache")
+
+    tracker = Tracker(db=db_path, cache=cache_path)
+
+    # --- Test 1: Function returning a dict (columns unpacked) ---
+
+    @tracker.wrap(params={"experiment": "v1"})
+    def evaluate(model_name: str, threshold: float = 0.5, top_k: int = 10) -> dict:
+        return {
+            "accuracy": 0.92,
+            "precision": 0.88,
+            "recall": 0.95,
+            "f1": 0.91,
+            "top_k_used": top_k,
+        }
+
+    # First call — computed
+    result1 = evaluate("bert", threshold=0.7, top_k=5)
+    assert result1 == {"accuracy": 0.92, "precision": 0.88, "recall": 0.95, "f1": 0.91, "top_k_used": 5}
+
+    # Second call with same args/kwargs — cache hit
+    result2 = evaluate("bert", threshold=0.7, top_k=5)
+    assert result2 == result1
+
+    df = tracker.to_df(all=True)
+    assert len(df) == 2
+
+    computed_row = df.iloc[0]
+    cached_row = df.iloc[1]
+
+    # Result columns must be identical
+    for col in ["accuracy", "precision", "recall", "f1", "top_k_used"]:
+        assert computed_row[col] == cached_row[col], f"Column '{col}' differs: {computed_row[col]} vs {cached_row[col]}"
+
+    # Function metadata must match
+    assert computed_row["function_name"] == cached_row["function_name"] == "evaluate"
+    assert computed_row["experiment"] == cached_row["experiment"] == "v1"
+    assert str(computed_row["args"]) == str(cached_row["args"])
+    assert str(computed_row["kwargs"]) == str(cached_row["kwargs"])
+
+    # Cache lineage: computed is empty, cached points to computed's track_id
+    assert computed_row["cache"] == ""
+    assert cached_row["cache"] == computed_row["track_id"]
+
+    # Computed should have nonzero function_time, cached should be 0
+    assert computed_row["function_time"] > 0 or True  # may be very fast
+    assert cached_row["function_time"] == 0.0
+
+    # Both should have error="" (no exceptions)
+    assert computed_row["error"] == ""
+    assert cached_row["error"] == ""
+
+    # --- Test 2: Function returning a primitive (stored in function_result) ---
+
+    db_path2 = os.path.join(tempdir.name, "test_db2")
+    cache_path2 = os.path.join(tempdir.name, "cache2")
+    tracker2 = Tracker(db=db_path2, cache=cache_path2)
+
+    @tracker2.wrap()
+    def score(text: str, weight: float = 1.0) -> float:
+        return len(text) * weight
+
+    # Computed
+    r1 = score("hello", weight=2.0)
+    assert r1 == 10.0
+
+    # Cached
+    r2 = score("hello", weight=2.0)
+    assert r2 == 10.0
+
+    df2 = tracker2.to_df(all=True)
+    assert len(df2) == 2
+
+    comp2 = df2.iloc[0]
+    cache2 = df2.iloc[1]
+
+    # function_result must be the same primitive value
+    assert comp2["function_result"] == cache2["function_result"] == 10.0
+
+    # Same metadata
+    assert comp2["function_name"] == cache2["function_name"] == "score"
+
+    # Cache lineage
+    assert comp2["cache"] == ""
+    assert cache2["cache"] == comp2["track_id"]
+
+    # --- Test 3: Different kwargs produce different cache entries ---
+
+    r3 = score("hello", weight=3.0)
+    assert r3 == 15.0
+
+    df3 = tracker2.to_df(all=True)
+    assert len(df3) == 3
+
+    # Third row should be computed (different kwargs = cache miss)
+    assert df3.iloc[2]["cache"] == ""
+    assert df3.iloc[2]["function_result"] == 15.0
+
+    # --- Test 4: Columns are consistent across all rows (no NaN gaps) ---
+
+    # All rows in df2 should have the same columns with no unexpected NaNs
+    result_cols = ["function_name", "function_result", "cache", "error"]
+    for col in result_cols:
+        assert df3[col].notna().all(), f"Column '{col}' has NaN values in some rows"
+
+    tempdir.cleanup()

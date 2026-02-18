@@ -1,6 +1,6 @@
 {
   "name": "git-versioning",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "ML experiment versioning using Git + DVC + xetrack + DuckDB. Guides sequential, parallel, and worktree-based experiment workflows with merge/rebase semantics.",
   "author": {
     "name": "XDSS"

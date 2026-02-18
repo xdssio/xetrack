@@ -128,6 +128,35 @@ def sql(db: str = typer.Argument(help='path to database'),
     typer.echo(df.to_markdown())
 
 
+cache_app = typer.Typer(short_help="Cache management commands")
+app.add_typer(cache_app, name="cache")
+
+
+@cache_app.command(name="delete")
+def cache_delete(
+    cache_path: str = typer.Argument(help="Path to the cache directory"),
+    track_id: str = typer.Argument(help="Track ID whose cache entries should be deleted"),
+):
+    """Delete all cache entries associated with a specific track_id."""
+    deleted = Reader.delete_cache_by_track_id(cache_path, track_id)
+    typer.echo(f"Deleted {deleted} cache entries for track_id '{track_id}'")
+
+
+@cache_app.command(name="ls")
+def cache_ls(
+    cache_path: str = typer.Argument(help="Path to the cache directory"),
+):
+    """List all cached entries with their track_id lineage."""
+    entries = list(Reader.scan_cache(cache_path))
+    if not entries:
+        typer.echo("Cache is empty")
+        return
+    typer.echo(f"Cache entries in {cache_path}:\n")
+    for key, cached_data in entries:
+        track_id = cached_data.get("cache", "N/A") if isinstance(cached_data, dict) else "N/A"
+        typer.echo(f"  track_id: {track_id}  key: {key}")
+
+
 assets_app = typer.Typer(short_help="A helper for assets managments")
 app.add_typer(assets_app, name="assets")
 

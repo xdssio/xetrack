@@ -304,3 +304,41 @@ class Reader:
         cache_obj = Cache(cache)
         for key in cache_obj.iterkeys():
             yield key, cache_obj[key]
+
+    @classmethod
+    def delete_cache_by_track_id(cls, cache: str, track_id: str) -> int:
+        """
+        Delete all cache entries associated with a specific track_id.
+
+        Scans the cache and removes entries where the "cache" field (the track_id
+        that computed the result) matches the given track_id.
+
+        Args:
+            cache: Path to cache directory
+            track_id: The track_id whose cache entries should be deleted
+
+        Returns:
+            Number of cache entries deleted
+
+        Example:
+            >>> deleted = Reader.delete_cache_by_track_id("cache_dir", "cool-name-1234")
+            >>> print(f"Deleted {deleted} cache entries")
+        """
+        try:
+            from diskcache import Cache
+        except ImportError as e:
+            raise ImportError(
+                "diskcache is not installed. Please install it using `pip install xetrack[cache]` or `pip install diskcache`"
+            ) from e
+
+        cache_obj = Cache(cache)
+        keys_to_delete = []
+        for key in cache_obj.iterkeys():
+            cached_data = cache_obj[key]
+            if isinstance(cached_data, dict) and cached_data.get("cache") == track_id:
+                keys_to_delete.append(key)
+
+        for key in keys_to_delete:
+            del cache_obj[key]
+
+        return len(keys_to_delete)
