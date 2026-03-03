@@ -1,5 +1,9 @@
-import pandas as pd
-from typing import Any, Optional, Literal
+from __future__ import annotations
+
+from typing import Any, Optional, Literal, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 from xetrack.engine import SqliteEngine
 from xetrack.config import SCHEMA_PARAMS
@@ -82,6 +86,8 @@ class Reader:
         else:
             cursor = self.engine.execute(query)
             
+        import pandas as pd
+
         # Convert cursor results to a DataFrame
         if hasattr(cursor, 'df'):
             results = cursor.df()
@@ -92,13 +98,15 @@ class Reader:
             rows = cursor.fetchall()
             # Convert to DataFrame
             results = pd.DataFrame.from_records(rows, columns=columns)
-            
+
         return results.sort_values(by=['timestamp'])
 
     def latest(self) -> pd.DataFrame:
+        import pandas as pd
+
         query = f"SELECT {SCHEMA_PARAMS.TRACK_ID} FROM {self.engine.table_name} ORDER BY {SCHEMA_PARAMS.TRACK_ID} DESC LIMIT 1"
         result = self.engine.execute(query).fetchone()
-        
+
         if result is None:
             return pd.DataFrame()  # Return empty DataFrame if no results
             
@@ -176,6 +184,8 @@ class Reader:
     @classmethod
     def read_logs(cls, path: str, limit: Optional[int] = None) -> pd.DataFrame:
         """Return a pandas dataframe of the logs in the given path"""
+        import pandas as pd
+
         helper = Logger()
         logs_df = pd.DataFrame(helper.read_logs(path, limit=limit))
 
@@ -215,6 +225,7 @@ class Reader:
                     # Entry is already flattened, use it directly
                     data.append(entry)
 
+        import pandas as pd
         return pd.DataFrame(data)
 
     @classmethod
