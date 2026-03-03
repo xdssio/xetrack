@@ -1,12 +1,13 @@
 from typing import Optional
 from xetrack import Reader
 from tempfile import NamedTemporaryFile
-from pandas.api.types import is_float_dtype
 from bashplotlib.histogram import plot_hist as bashplot_hist
 from bashplotlib.scatterplot import plot_scatter as bashplot_scatter
 
 
 def _to_csv(db: str, columns: list[str], path: str) -> str:
+    from pandas.api.types import is_float_dtype
+
     df = Reader(db).to_df()
     for column in columns:
         if column not in df.columns:

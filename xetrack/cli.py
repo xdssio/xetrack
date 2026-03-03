@@ -1,6 +1,10 @@
-from typing import Literal, Union, List
-import pandas as pd
+from __future__ import annotations
+
+from typing import Literal, Union, List, TYPE_CHECKING
 import typer
+
+if TYPE_CHECKING:
+    import pandas as pd
 from xetrack import Reader, copy as copy_db
 from json import dumps
 app = typer.Typer()
