@@ -1,10 +1,14 @@
+from __future__ import annotations
+
 import logging
 import os
-from typing import Any, Optional, List, Dict
+from typing import Any, Optional, List, Dict, TYPE_CHECKING
 from xetrack.engine import Engine
 from xetrack.config import SCHEMA_PARAMS, CONSTANTS, TRACKER_CONSTANTS
 import duckdb
-import pandas as pd
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 logger = logging.getLogger(__name__)

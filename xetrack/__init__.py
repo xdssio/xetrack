@@ -3,7 +3,6 @@ from typing import List, Dict, Set, Tuple, Optional
 from loguru import logger
 from xetrack.config import SCHEMA_PARAMS, TRACKER_CONSTANTS
 from xetrack.tracker import Tracker
-from xetrack.reader import Reader
 
 __version__ = "0.0.0"
 
@@ -14,6 +13,13 @@ except ImportError:
     pass
 
 __all__ = ['Reader', 'Tracker', 'copy']
+
+
+def __getattr__(name: str):
+    if name == "Reader":
+        from xetrack.reader import Reader
+        return Reader
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _get_existing_event_ids(tracker: Tracker) -> Set[str]:

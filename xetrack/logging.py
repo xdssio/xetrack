@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 import sys
 import json
 import os
-import pandas as pd
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional, Union, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pandas as pd
 import re
 from xetrack.config import LOGURU_PARAMS
 
