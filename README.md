@@ -36,7 +36,7 @@ Lightweight, local-first experiment tracker and benchmark store built on [SQLite
 Most experiment trackers — like Weights & Biases — rely on cloud servers...
 xetrack is a lightweight package to track benchmarks, experiments, and monitor structured data.   
 It is focused on simplicity and flexibility.
-You create a "Tracker", and let it track benchmark results, model training and inference monitoring. later retrieve as pandas or connect to it directly as a database.
+You create a "Tracker", and let it track benchmark results, model training and inference monitoring. Later retrieve as pandas or polars DataFrames, or connect to it directly as a database.
 
 
 ## Features
@@ -44,7 +44,7 @@ You create a "Tracker", and let it track benchmark results, model training and i
 * Simple
 * Embedded
 * Fast
-* Pandas-like
+* Pandas & Polars support
 * SQL-like
 * Object store with deduplication
 * CLI for basic functions
@@ -60,6 +60,7 @@ pip install xetrack
 pip install xetrack[duckdb] # to use duckdb as engine
 pip install xetrack[assets] # to be able to use the assets manager to save objects
 pip install xetrack[cache] # to enable function result caching
+pip install xetrack[polars] # to use polars instead of pandas for DataFrames
 ```
 
 ## Examples
@@ -507,7 +508,9 @@ result3 = tracker.track(train_model, args=[config3])  # Computed (different lear
 
 * ```Tracker(Tracker.IN_MEMORY, logs_path='logs/') ``` Let you run only in memory - great for debugging or working with logs only
 
-### Pandas-like
+### Pandas & Polars Support
+
+xetrack supports both **pandas** and **polars** as DataFrame backends. By default, pandas is used when both are installed. If only polars is installed, it is used automatically.
 
 ```python
 print(tracker)
@@ -516,9 +519,34 @@ print(tracker)
 1  8a43000a-03a4-4822-98f8-4df671c2d410  fd0bfe4f-7257-4ec3-8c6f-91fe8ae67d20  16-08-2023 00:24:21  NaN  NaN       1.0
 
 tracker['accuracy'] # get accuracy column
-tracker.to_df() # get pandas dataframe of current run
+tracker.to_df() # get a DataFrame of current run (pandas or polars depending on backend)
 
 ```
+
+**Switching backends:**
+
+```python
+from xetrack import set_backend, get_backend
+
+# Check current backend
+print(get_backend())  # "pandas" or "polars"
+
+# Explicitly switch to polars
+set_backend("polars")
+tracker.to_df()  # returns a polars DataFrame
+
+# Switch back to pandas
+set_backend("pandas")
+
+# Auto-detect (pandas preferred when both installed)
+set_backend("auto")
+```
+
+**Detection priority:**
+- Both installed → pandas (backward compatible)
+- Only pandas → pandas
+- Only polars → polars
+- Neither → `ImportError`
 
 ### SQL-like
 You can filter the data using SQL-like syntax using [duckdb](https://duckdb.org/docs):
@@ -984,6 +1012,7 @@ Full documentation is in the skill itself:
 - **DuckDB features**: Run `pip install xetrack[duckdb]`
 - **Asset management**: Run `pip install xetrack[assets]`
 - **Caching support**: Run `pip install xetrack[cache]`
+- **Polars backend**: Run `pip install xetrack[polars]`
 
 **"Dataclass not unpacking" issues:**
 - **Check method**: Auto-unpacking only works with `.track()`, not `.log()`

@@ -12,7 +12,7 @@ try:
 except ImportError:
     pass
 
-from xetrack._dataframe import get_backend, set_backend  # noqa: F401
+from xetrack._dataframe import get_backend, set_backend, df_to_dict_records  # noqa: F401
 
 __all__ = ['Reader', 'Tracker', 'copy', 'get_backend', 'set_backend']
 
@@ -160,7 +160,6 @@ def _copy_table_events(
     column_info = source_tracker.engine.execute_sql(
         f"PRAGMA table_info({source_tracker.engine.table_name})"
     )
-    from xetrack._dataframe import df_to_dict_records
     columns = [row['name'] for row in df_to_dict_records(column_info)]
 
     # Find indices for timestamp and track_id

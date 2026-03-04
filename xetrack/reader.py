@@ -150,7 +150,7 @@ class Reader:
     @classmethod
     def read_jsonl(cls, path: str) -> Any:
         """
-        Read JSONL file into pandas DataFrame.
+        Read JSONL file into a DataFrame.
 
         Parses JSONL entries created by xetrack logging and returns structured data
         suitable for data synthesis and GenAI dataset creation.

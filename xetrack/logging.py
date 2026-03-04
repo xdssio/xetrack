@@ -3,10 +3,7 @@ from __future__ import annotations
 import sys
 import json
 import os
-from typing import Dict, List, Optional, Union, Any, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import pandas as pd
+from typing import Dict, List, Optional, Union, Any
 import re
 from xetrack.config import LOGURU_PARAMS
 
@@ -161,21 +158,21 @@ class Logger:
     def experiment(self, params: Dict[str, Any]):
         self.log(params, LOGURU_PARAMS.EXPERIMENT, indent=4)
 
-    def track(self, data: Union[Dict[str, Any], pd.DataFrame, List[Dict[str, Any]]]):
+    def track(self, data: Union[Dict[str, Any], Any, List[Dict[str, Any]]]):
         return self.log(data, LOGURU_PARAMS.TRACKING)
 
     def monitor(
-        self, data: Union[Dict[str, Any], pd.DataFrame, List[Dict[str, Any]]]
+        self, data: Union[Dict[str, Any], Any, List[Dict[str, Any]]]
     ) -> Any:
         return self.log(data, LOGURU_PARAMS.MONITOR)
 
     def log(
         self,
-        data: Union[Dict[str, Any], pd.DataFrame, List[Dict[str, Any]]],
+        data: Union[Dict[str, Any], Any, List[Dict[str, Any]]],
         level: str = LOGURU_PARAMS.MONITOR,
         indent: Optional[int] = None,
     ) -> Any:
-        """Create a monitoring log from a dictionary, a list of dictionaries or a pandas DataFrame"""
+        """Create a monitoring log from a dictionary, a list of dictionaries, or a DataFrame."""
         if isinstance(data, dict):
             self.logger.log(level, json.dumps(data, indent=indent))
         elif isinstance(data, list):

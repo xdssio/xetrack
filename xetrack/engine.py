@@ -182,15 +182,14 @@ class Engine(ABC, Generic[T]):
 
     @abstractmethod
     def execute_sql(self, query: str, params: Optional[List[Any]] = None) -> Any:
-        """
-        Execute SQL query and return a pandas DataFrame with the results.
-        
+        """Execute SQL query and return a DataFrame with the results.
+
         Args:
             query: The SQL query to execute
             params: Optional parameters for the query
-            
+
         Returns:
-            pandas.DataFrame: A DataFrame containing the query results
+            A pandas or polars DataFrame depending on the active backend.
         """
         pass
 
