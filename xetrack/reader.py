@@ -86,44 +86,24 @@ class Reader:
         else:
             cursor = self.engine.execute(query)
             
-        import pandas as pd
+        from xetrack._dataframe import cursor_to_dataframe, df_sort
 
-        # Convert cursor results to a DataFrame
-        if hasattr(cursor, 'df'):
-            results = cursor.df()
-        else:
-            # Get column names from cursor description
-            columns = [col[0] for col in cursor.description] if cursor.description else []
-            # Fetch all rows
-            rows = cursor.fetchall()
-            # Convert to DataFrame
-            results = pd.DataFrame.from_records(rows, columns=columns)
-
-        return results.sort_values(by=['timestamp'])
+        results = cursor_to_dataframe(cursor)
+        return df_sort(results, by='timestamp')
 
     def latest(self) -> pd.DataFrame:
-        import pandas as pd
+        from xetrack._dataframe import cursor_to_dataframe, empty_dataframe
 
         query = f"SELECT {SCHEMA_PARAMS.TRACK_ID} FROM {self.engine.table_name} ORDER BY {SCHEMA_PARAMS.TRACK_ID} DESC LIMIT 1"
         result = self.engine.execute(query).fetchone()
 
         if result is None:
-            return pd.DataFrame()  # Return empty DataFrame if no results
-            
+            return empty_dataframe()
+
         latest_track_id = result[0]
         query = f"SELECT * FROM {self.engine.table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
         cursor = self.engine.execute(query, [latest_track_id])
-        
-        # Convert cursor results to a DataFrame
-        if hasattr(cursor, 'df'):
-            return cursor.df()
-        else:
-            # Get column names from cursor description
-            columns = [col[0] for col in cursor.description] if cursor.description else []
-            # Fetch all rows
-            rows = cursor.fetchall()
-            # Convert to DataFrame
-            return pd.DataFrame.from_records(rows, columns=columns)
+        return cursor_to_dataframe(cursor)
 
     def delete_run(self, track_id: str) -> bool:
         """
@@ -183,15 +163,14 @@ class Reader:
 
     @classmethod
     def read_logs(cls, path: str, limit: Optional[int] = None) -> pd.DataFrame:
-        """Return a pandas dataframe of the logs in the given path"""
-        import pandas as pd
+        """Return a DataFrame of the logs in the given path."""
+        from xetrack._dataframe import dataframe_from_dicts, df_is_empty, df_dropna_all
 
         helper = Logger()
-        logs_df = pd.DataFrame(helper.read_logs(path, limit=limit))
+        logs_df = dataframe_from_dicts(helper.read_logs(path, limit=limit))
 
-        # Filter out rows where all columns are NaN
-        if not logs_df.empty:
-            logs_df = logs_df.dropna(how='all')
+        if not df_is_empty(logs_df):
+            logs_df = df_dropna_all(logs_df)
 
         return logs_df
 
@@ -225,8 +204,8 @@ class Reader:
                     # Entry is already flattened, use it directly
                     data.append(entry)
 
-        import pandas as pd
-        return pd.DataFrame(data)
+        from xetrack._dataframe import dataframe_from_dicts
+        return dataframe_from_dicts(data)
 
     @classmethod
     def read_db(
