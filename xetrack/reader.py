@@ -118,12 +118,9 @@ class Reader:
         return self.engine.set_value(key, value, track_id)
         
     def set_where(self, key: str, value: Any, where_key: str, where_value: Any, track_id: Optional[str] = None) -> None:
-        """
-        Set a value in the database where a condition is met.
+        """Set a value in the database where a condition is met.
 
-        Uses SQL UPDATE directly for both SQLite and DuckDB engines.
-        For SQLite, uses CAST to handle potential type mismatches
-        (e.g., numeric values stored as text).
+        Delegates to the engine's SQL UPDATE directly.
 
         Args:
             key: The key whose value needs to be set

@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "xetrack"
-version = "0.5.3"
+version = "0.6.0"
 description = "A simple tool for benchamrking and tracking machine learning models and experiments."
 readme = "README.md"
 packages = [{ include = "xetrack" }]
@@ -45,10 +45,10 @@ sqlitedict = { version = ">=2.0.0", optional = true }
 duckdb = { version = ">=0.8.0", optional = true }
 bashplotlib = { version = ">=0.6.0", optional = true }
 diskcache = { version = ">=5.6.0", optional = true }
-polars = { version = ">=0.20.0", optional = true }
+polars = { version = ">=1.0.0", optional = true }
 
 [tool.poetry.extras]
-dev = ["pytest", "scikit-learn", "bashplotlib", "sqlitedict", "duckdb", "diskcache"]
+dev = ["pytest", "scikit-learn", "bashplotlib", "sqlitedict", "duckdb", "diskcache", "polars"]
 assets =["sqlitedict"]
 duckdb = ["duckdb"]
 bashplotlib = ["bashplotlib"]
