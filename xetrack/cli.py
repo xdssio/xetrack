@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from typing import Literal, Union, List, TYPE_CHECKING
+from typing import Literal, Union, List
 import typer
-
-if TYPE_CHECKING:
-    import pandas as pd
 from xetrack import Reader, copy as copy_db
 from json import dumps
 app = typer.Typer()
@@ -17,10 +14,11 @@ def head(db: str = typer.Argument(help='path to database'),
          engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"'),
          table: str = typer.Option("default", help="Name of the table to read from")):
     """Show the first lines of the database events table"""
+    from xetrack._dataframe import df_to_dict_records, df_to_markdown
+
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
     df = Reader(db, engine=engine_literal, table=table).to_df(head=n)
-    result = dumps(df.to_dict(orient='records'),
-                   indent=4) if json else df.to_markdown()
+    result = dumps(df_to_dict_records(df), indent=4) if json else df_to_markdown(df)
     typer.echo(result)
 
 
@@ -31,10 +29,11 @@ def tail(db: str = typer.Argument(help='path to database'),
          engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"'),
          table: str = typer.Option("default", help="Name of the table to read from")):
     """Show the last lines of the database events table"""
+    from xetrack._dataframe import df_to_dict_records, df_to_markdown
+
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
     df = Reader(db, engine=engine_literal, table=table).to_df(tail=n)
-    result = dumps(df.to_dict(orient='records'),
-                   indent=4) if json else df.to_markdown()
+    result = dumps(df_to_dict_records(df), indent=4) if json else df_to_markdown(df)
     typer.echo(result)
 
 
@@ -43,8 +42,10 @@ def columns(db: str = typer.Argument(help='path to database'),
             engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"'),
             table: str = typer.Option("default", help="Name of the table to read from")):
     """List the columns in the database"""
+    from xetrack._dataframe import df_columns
+
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
-    columns_list = list(Reader(db, engine=engine_literal, table=table).to_df(head=1).columns)
+    columns_list = df_columns(Reader(db, engine=engine_literal, table=table).to_df(head=1))
     typer.echo(f"Columns in {db} table '{table}':\n")
     typer.echo(columns_list)
 
@@ -108,16 +109,17 @@ def ls(db: str = typer.Argument(help='path to database'),
        engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"'),
        table: str = typer.Option("default", help="Name of the table to read from")):
     """List all the track IDs in the database"""
+    from xetrack._dataframe import df_columns, df_unique_series, df_to_markdown
+
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
     df = Reader(db, engine=engine_literal, table=table).to_df(track_id=track_id)
     if column is None:
-        typer.echo(df.columns.tolist())
+        typer.echo(df_columns(df))
         return
     values = df[column]
     if unique:
-        import pandas as pd
-        values = pd.Series(values.unique(), name=column)
-    typer.echo(values.to_markdown())
+        values = df_unique_series(df, column)
+    typer.echo(df_to_markdown(values))
 
 
 @app.command()
@@ -126,10 +128,12 @@ def sql(db: str = typer.Argument(help='path to database'),
         engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"'),
         table: str = typer.Option("default", help="Name of the table to read from")):
     """Execute a SQL query on the database and show the results as a markdown table - consider that the default table is 'db.default' or 'default'\n\nExample: xt sql path/to/database.db 'SELECT * FROM db.default LIMIT 5' """
+    from xetrack._dataframe import df_to_markdown
+
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
     reader = Reader(db, engine=engine_literal, table=table)
-    df: pd.DataFrame = reader.engine.execute_sql(query)
-    typer.echo(df.to_markdown())
+    df = reader.engine.execute_sql(query)
+    typer.echo(df_to_markdown(df))
 
 
 cache_app = typer.Typer(short_help="Cache management commands")
@@ -248,12 +252,15 @@ stats_app = typer.Typer(
 app.add_typer(stats_app, name="stats")
 
 
-def _get_df(db: str, columns: str = "", engine: str = "sqlite") -> pd.DataFrame:
+def _get_df(db: str, columns: str = "", engine: str = "sqlite"):
+    """Get a DataFrame from the database, optionally selecting specific columns."""
+    from xetrack._dataframe import df_select_columns
+
     engine_literal: Literal['duckdb', 'sqlite'] = 'sqlite' if engine == 'sqlite' else 'duckdb'
-    df: pd.DataFrame = Reader(db, engine=engine_literal).to_df()
+    df = Reader(db, engine=engine_literal).to_df()
     if columns != '':
         columns_list = columns.split(',')
-        df = df[columns_list]  # type: ignore
+        df = df_select_columns(df, columns_list)
     return df
 
 
@@ -262,8 +269,10 @@ def describe(db: str = typer.Argument(help='path to database'),
              columns: str = typer.Option('', help='columns to describe - comma separated list (e.g. "col1,col2,col3")'),
              engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """Describe columns in the database - use either numeric or categorical columns."""
-    df: pd.DataFrame = _get_df(db, columns, engine)
-    typer.echo(df.describe().to_markdown())
+    from xetrack._dataframe import df_describe, df_to_markdown
+
+    df = _get_df(db, columns, engine)
+    typer.echo(df_to_markdown(df_describe(df)))
 
 
 @stats_app.command()
@@ -271,16 +280,20 @@ def top(db: str = typer.Argument(help='path to database'),
         column: str = typer.Argument(help='Entry with best value'),
         engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
     """Get the maximum value in the column"""
-    df: pd.DataFrame = _get_df(db, engine=engine)
-    df = df[df[column] == df[column].max()]  # type: ignore
-    typer.echo(str(df.to_markdown()))
+    from xetrack._dataframe import df_filter_eq, df_column_max, df_to_markdown
+
+    df = _get_df(db, engine=engine)
+    df = df_filter_eq(df, column, df_column_max(df, column))
+    typer.echo(df_to_markdown(df))
 
 
 @stats_app.command()
 def bottom(db: str = typer.Argument(help='path to database'),
            column: str = typer.Argument(help='Entry with best value'),
            engine: str = typer.Option("sqlite", help='database engine to use: "duckdb" or "sqlite"')):
-    """Get the maximum value in the column"""
-    df: pd.DataFrame = _get_df(db, engine=engine)
-    df = df[df[column] == df[column].min()]  # type: ignore
-    typer.echo(str(df.to_markdown()))
+    """Get the minimum value in the column"""
+    from xetrack._dataframe import df_filter_eq, df_column_min, df_to_markdown
+
+    df = _get_df(db, engine=engine)
+    df = df_filter_eq(df, column, df_column_min(df, column))
+    typer.echo(df_to_markdown(df))

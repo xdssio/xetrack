@@ -11,13 +11,15 @@ Usage:
     df = cursor_to_dataframe(cursor)
 
     # Force polars
-    set_backend('polars')
+    set_backend(POLARS)
     df = cursor_to_dataframe(cursor)
 """
 from __future__ import annotations
 
 from typing import Any, List, Optional
 
+PANDAS = "pandas"
+POLARS = "polars"
 
 _BACKEND: Optional[str] = None
 
@@ -28,19 +30,19 @@ def _detect_backend() -> str:
     Priority: pandas (if installed) > polars > error.
 
     Returns:
-        'pandas' or 'polars'
+        PANDAS or POLARS
 
     Raises:
         ImportError: If neither pandas nor polars is installed.
     """
     try:
         import pandas  # noqa: F401
-        return "pandas"
+        return PANDAS
     except ImportError:
         pass
     try:
         import polars  # noqa: F401
-        return "polars"
+        return POLARS
     except ImportError:
         raise ImportError(
             "Either pandas or polars must be installed. "
@@ -49,7 +51,7 @@ def _detect_backend() -> str:
 
 
 def get_backend() -> str:
-    """Get the current DataFrame backend ('polars' or 'pandas')."""
+    """Get the current DataFrame backend (PANDAS or POLARS)."""
     global _BACKEND
     if _BACKEND is None:
         _BACKEND = _detect_backend()
@@ -60,12 +62,12 @@ def set_backend(backend: str) -> None:
     """Override the DataFrame backend.
 
     Args:
-        backend: 'polars', 'pandas', or 'auto' to re-detect.
+        backend: POLARS, PANDAS, or 'auto' to re-detect.
     """
     global _BACKEND
     if backend == "auto":
         _BACKEND = _detect_backend()
-    elif backend in ("polars", "pandas"):
+    elif backend in (POLARS, PANDAS):
         _BACKEND = backend
     else:
         raise ValueError(f"Unknown backend: {backend!r}. Use 'polars', 'pandas', or 'auto'.")
@@ -83,9 +85,7 @@ def cursor_to_dataframe(cursor: Any) -> Any:
     Returns:
         A pandas or polars DataFrame depending on the configured backend.
     """
-    backend = get_backend()
-
-    if backend == "polars":
+    if get_backend() == POLARS:
         import polars as pl
         if hasattr(cursor, 'pl'):
             return cursor.pl()
@@ -112,8 +112,7 @@ def dataframe_from_dicts(data: list[dict]) -> Any:
     Returns:
         A pandas or polars DataFrame.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         import polars as pl
         return pl.DataFrame(data) if data else pl.DataFrame()
     else:
@@ -130,8 +129,7 @@ def empty_dataframe(columns: Optional[List[str]] = None) -> Any:
     Returns:
         An empty pandas or polars DataFrame.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         import polars as pl
         if columns:
             return pl.DataFrame(schema={col: pl.Utf8 for col in columns})
@@ -151,8 +149,7 @@ def df_sort(df: Any, by: str | list[str]) -> Any:
     Returns:
         Sorted DataFrame.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         return df.sort(by)
     return df.sort_values(by=by)
 
@@ -166,25 +163,27 @@ def df_to_dict_records(df: Any) -> list[dict]:
     Returns:
         List of row dictionaries.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         return df.to_dicts()
     return df.to_dict(orient='records')
 
 
 def df_to_markdown(df: Any) -> str:
-    """Convert a DataFrame to a markdown table string.
+    """Convert a DataFrame or Series to a markdown table string.
 
     Args:
-        df: A pandas or polars DataFrame.
+        df: A pandas/polars DataFrame or Series.
 
     Returns:
         Markdown-formatted table string.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         from tabulate import tabulate
-        return tabulate(df.to_dicts(), headers="keys", tablefmt="pipe")
+        # Handle both DataFrame and Series
+        if hasattr(df, 'to_dicts'):
+            return tabulate(df.to_dicts(), headers="keys", tablefmt="pipe")
+        # Polars Series — convert to DataFrame first
+        return tabulate(df.to_frame().to_dicts(), headers="keys", tablefmt="pipe")
     return df.to_markdown()
 
 
@@ -195,8 +194,7 @@ def df_to_csv(df: Any, path: str) -> None:
         df: A pandas or polars DataFrame.
         path: Output file path.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         df.write_csv(path)
     else:
         df.to_csv(path, index=False)
@@ -209,8 +207,7 @@ def df_to_parquet(df: Any, path: str) -> None:
         df: A pandas or polars DataFrame.
         path: Output file path.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         df.write_parquet(path)
     else:
         df.to_parquet(path, index=False)
@@ -225,8 +222,7 @@ def df_is_empty(df: Any) -> bool:
     Returns:
         True if the DataFrame has no rows.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         return len(df) == 0
     return df.empty
 
@@ -240,8 +236,7 @@ def df_columns(df: Any) -> list[str]:
     Returns:
         List of column names.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         return df.columns
     return df.columns.tolist()
 
@@ -257,8 +252,7 @@ def df_filter_eq(df: Any, column: str, value: Any) -> Any:
     Returns:
         Filtered DataFrame.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         import polars as pl
         return df.filter(pl.col(column) == value)
     return df[df[column] == value]
@@ -273,8 +267,7 @@ def df_dropna_all(df: Any) -> Any:
     Returns:
         DataFrame with all-null rows removed.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         import polars as pl
         return df.filter(~pl.all_horizontal(pl.all().is_null()))
     return df.dropna(how='all')
@@ -290,8 +283,7 @@ def df_column_is_float(df: Any, column: str) -> bool:
     Returns:
         True if the column dtype is float.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         import polars as pl
         return df[column].dtype in (pl.Float32, pl.Float64)
     else:
@@ -309,8 +301,7 @@ def df_unique_series(df: Any, column: str) -> Any:
     Returns:
         A pandas Series or polars Series with unique values.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         return df[column].unique()
     else:
         import pandas as pd
@@ -339,41 +330,18 @@ def df_row_to_dict(df: Any, index: int) -> dict:
     Returns:
         Dictionary of column names to values.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         return df.row(index, named=True)
     return df.iloc[index].to_dict()
 
 
 def df_column_max(df: Any, column: str) -> Any:
-    """Get the maximum value in a column.
-
-    Args:
-        df: A pandas or polars DataFrame.
-        column: Column name.
-
-    Returns:
-        The maximum value.
-    """
-    backend = get_backend()
-    if backend == "polars":
-        return df[column].max()
+    """Get the maximum value in a column."""
     return df[column].max()
 
 
 def df_column_min(df: Any, column: str) -> Any:
-    """Get the minimum value in a column.
-
-    Args:
-        df: A pandas or polars DataFrame.
-        column: Column name.
-
-    Returns:
-        The minimum value.
-    """
-    backend = get_backend()
-    if backend == "polars":
-        return df[column].min()
+    """Get the minimum value in a column."""
     return df[column].min()
 
 
@@ -387,7 +355,6 @@ def df_select_columns(df: Any, columns: list[str]) -> Any:
     Returns:
         DataFrame with only the selected columns.
     """
-    backend = get_backend()
-    if backend == "polars":
+    if get_backend() == POLARS:
         return df.select(columns)
     return df[columns]
