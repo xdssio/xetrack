@@ -119,8 +119,12 @@ class Reader:
         
     def set_where(self, key: str, value: Any, where_key: str, where_value: Any, track_id: Optional[str] = None) -> None:
         """
-        Set a value in the database where a condition is met
-        
+        Set a value in the database where a condition is met.
+
+        Uses SQL UPDATE directly for both SQLite and DuckDB engines.
+        For SQLite, uses CAST to handle potential type mismatches
+        (e.g., numeric values stored as text).
+
         Args:
             key: The key whose value needs to be set
             value: The value to set
@@ -128,30 +132,7 @@ class Reader:
             where_value: The value to match in the WHERE clause
             track_id: Optional track ID to restrict updates to
         """
-        # For SQLite connections, we need to handle string values differently
-        # SQLite might store numeric values as strings, so we need to ensure the 
-        # where_value comparison handles this correctly
-        if isinstance(self.engine, SqliteEngine):
-            # Get all records that match the criteria
-            df = self.to_df()
-            
-            # For SQLite, convert values to string for comparison
-            # This is important because SQLite might store numeric values as strings
-            matching_rows = df[df[where_key].astype(str) == str(where_value)]
-            
-            # If track_id is provided, further filter the matching rows
-            if track_id is not None:
-                matching_rows = matching_rows[matching_rows[SCHEMA_PARAMS.TRACK_ID] == track_id]
-                
-            # For each matching row, update the value using track_id
-            for _, row in matching_rows.iterrows():
-                self.set_value(key, value, row[SCHEMA_PARAMS.TRACK_ID])
-        else:
-            # For DuckDB, use the engine's set_where method directly
-            self.engine.set_where(key, value, where_key, where_value, track_id)
-            
-            # Ensure the database change is flushed and our in-memory representation is updated
-            self.engine.conn.commit()
+        self.engine.set_where(key, value, where_key, where_value, track_id)
         
     def remove_asset(self, hash_value: str, column: Optional[str], remove_keys: bool = True) -> bool:
         """Remove an asset from the database"""
