@@ -8,6 +8,10 @@ if TYPE_CHECKING:
 from xetrack.engine import SqliteEngine
 from xetrack.config import SCHEMA_PARAMS
 from xetrack.logging import Logger
+from xetrack._dataframe import (
+    cursor_to_dataframe, dataframe_from_dicts, empty_dataframe,
+    df_sort, df_is_empty, df_dropna_all,
+)
 
 # Handle DuckDBEngine import with proper error handling
 try:
@@ -86,14 +90,10 @@ class Reader:
         else:
             cursor = self.engine.execute(query)
             
-        from xetrack._dataframe import cursor_to_dataframe, df_sort
-
         results = cursor_to_dataframe(cursor)
         return df_sort(results, by='timestamp')
 
     def latest(self) -> pd.DataFrame:
-        from xetrack._dataframe import cursor_to_dataframe, empty_dataframe
-
         query = f"SELECT {SCHEMA_PARAMS.TRACK_ID} FROM {self.engine.table_name} ORDER BY {SCHEMA_PARAMS.TRACK_ID} DESC LIMIT 1"
         result = self.engine.execute(query).fetchone()
 
@@ -142,8 +142,6 @@ class Reader:
     @classmethod
     def read_logs(cls, path: str, limit: Optional[int] = None) -> pd.DataFrame:
         """Return a DataFrame of the logs in the given path."""
-        from xetrack._dataframe import dataframe_from_dicts, df_is_empty, df_dropna_all
-
         helper = Logger()
         logs_df = dataframe_from_dicts(helper.read_logs(path, limit=limit))
 
@@ -182,7 +180,6 @@ class Reader:
                     # Entry is already flattened, use it directly
                     data.append(entry)
 
-        from xetrack._dataframe import dataframe_from_dicts
         return dataframe_from_dicts(data)
 
     @classmethod

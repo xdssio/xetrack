@@ -18,6 +18,7 @@ from xetrack.engine import Engine, SqliteEngine
 from xetrack.config import CONSTANTS, SCHEMA_PARAMS, TRACKER_CONSTANTS, LOGURU_PARAMS
 from xetrack.logging import Logger
 from xetrack.git import get_commit_hash
+from xetrack._dataframe import cursor_to_dataframe, df_row_to_dict, df_to_csv, df_to_parquet
 
 ConnT = TypeVar('ConnT')
 
@@ -1001,8 +1002,6 @@ class Tracker:
         return self.head().__repr__()
 
     def to_df(self, all: bool = False):
-        from xetrack._dataframe import cursor_to_dataframe
-
         query = f"SELECT * FROM {self.engine.table_name}"
         if not all:
             query += f" WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
@@ -1013,8 +1012,6 @@ class Tracker:
         return cursor_to_dataframe(cursor)
 
     def __getitem__(self, item: Union[str, int]) -> Any:
-        from xetrack._dataframe import cursor_to_dataframe, df_row_to_dict
-
         if isinstance(item, str):
             query = f"SELECT {item} FROM {self.engine.table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
             cursor = self.engine.execute(query, [self.track_id])
@@ -1038,15 +1035,11 @@ class Tracker:
             self.set_param(key, value)
 
     def head(self, n: int = 5):
-        from xetrack._dataframe import cursor_to_dataframe
-
         query = f"SELECT * FROM {self.engine.table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ? LIMIT ?"
         cursor = self.engine.execute(query, [self.track_id, n])
         return cursor_to_dataframe(cursor)
 
     def tail(self, n: int = 5):
-        from xetrack._dataframe import cursor_to_dataframe
-
         query = f"SELECT * FROM {self.engine.table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ? ORDER BY {TRACKER_CONSTANTS.TIMESTAMP} DESC LIMIT ?"
         cursor = self.engine.execute(query, [self.track_id, n])
         return cursor_to_dataframe(cursor)
@@ -1074,9 +1067,7 @@ class Tracker:
             self.engine.conn.close()
 
     def to_csv(self, path: str, all: bool = False):
-        from xetrack._dataframe import df_to_csv
         df_to_csv(self.to_df(all), path)
 
     def to_parquet(self, path: str, all: bool = False):
-        from xetrack._dataframe import df_to_parquet
         df_to_parquet(self.to_df(all), path)
