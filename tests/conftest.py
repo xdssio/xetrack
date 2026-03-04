@@ -8,3 +8,11 @@ def df_backend(request):
     set_backend(request.param)
     yield request.param
     set_backend("auto")
+
+
+@pytest.fixture(autouse=True)
+def _ensure_pandas_default():
+    """Reset backend to pandas before every test to protect tests that use raw pandas API."""
+    set_backend(PANDAS)
+    yield
+    set_backend("auto")

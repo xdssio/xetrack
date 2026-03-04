@@ -2,12 +2,13 @@
 
 Verifies that core xetrack operations work under both pandas and polars backends.
 """
+import pytest
 from tempfile import NamedTemporaryFile
 
 from xetrack import Tracker
 from xetrack._dataframe import (
     get_backend, set_backend, PANDAS, POLARS,
-    cursor_to_dataframe, dataframe_from_dicts, empty_dataframe,
+    dataframe_from_dicts, empty_dataframe,
     df_sort, df_to_dict_records, df_to_markdown, df_columns,
     df_is_empty, df_filter_eq, df_row_to_dict, df_column_max,
     df_column_min, df_describe, df_select_columns, df_dropna_all,
@@ -22,12 +23,13 @@ def test_backend_detection():
 
 def test_set_backend_polars():
     set_backend(POLARS)
-    assert get_backend() == POLARS
-    set_backend("auto")
+    try:
+        assert get_backend() == POLARS
+    finally:
+        set_backend("auto")
 
 
 def test_set_backend_invalid():
-    import pytest
     with pytest.raises(ValueError, match="Unknown backend"):
         set_backend("invalid")
 
