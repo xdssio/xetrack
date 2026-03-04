@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional, Literal, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import pandas as pd
+from typing import Any, Optional, Literal
 
 from xetrack.engine import SqliteEngine
 from xetrack.config import SCHEMA_PARAMS
@@ -68,9 +65,9 @@ class Reader:
         track_id: Optional[str] = None,
         head: Optional[int] = None,
         tail: Optional[int] = None,
-    ) -> pd.DataFrame:
+    ) -> Any:
         """
-        Returns a pandas dataframe of the events table
+        Returns a DataFrame of the events table
 
         Args:
             track_id (Optional[str], optional): The track ID used to identify the specific record in the table. Defaults to None.
@@ -93,7 +90,7 @@ class Reader:
         results = cursor_to_dataframe(cursor)
         return df_sort(results, by='timestamp')
 
-    def latest(self) -> pd.DataFrame:
+    def latest(self) -> Any:
         query = f"SELECT {SCHEMA_PARAMS.TRACK_ID} FROM {self.engine.table_name} ORDER BY {SCHEMA_PARAMS.TRACK_ID} DESC LIMIT 1"
         result = self.engine.execute(query).fetchone()
 
@@ -140,7 +137,7 @@ class Reader:
         return self.engine.count_records()
 
     @classmethod
-    def read_logs(cls, path: str, limit: Optional[int] = None) -> pd.DataFrame:
+    def read_logs(cls, path: str, limit: Optional[int] = None) -> Any:
         """Return a DataFrame of the logs in the given path."""
         helper = Logger()
         logs_df = dataframe_from_dicts(helper.read_logs(path, limit=limit))
@@ -151,7 +148,7 @@ class Reader:
         return logs_df
 
     @classmethod
-    def read_jsonl(cls, path: str) -> pd.DataFrame:
+    def read_jsonl(cls, path: str) -> Any:
         """
         Read JSONL file into pandas DataFrame.
 
@@ -191,7 +188,7 @@ class Reader:
         track_id: Optional[str] = None,
         head: Optional[int] = None,
         tail: Optional[int] = None,
-    ) -> pd.DataFrame:
+    ) -> Any:
         """
         Class method to read database into DataFrame.
 

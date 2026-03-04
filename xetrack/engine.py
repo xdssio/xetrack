@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional, List, TypeVar, Generic, Dict, Set, TYPE_CHECKING
+from typing import Any, Optional, List, TypeVar, Generic, Dict, Set
 from xetrack.config import SCHEMA_PARAMS, CONSTANTS, DEFAULTS, TRACKER_CONSTANTS
 import sqlite3
 from abc import ABC, abstractmethod
 import os
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 
 logger = logging.getLogger(__name__)
@@ -184,7 +181,7 @@ class Engine(ABC, Generic[T]):
         pass
 
     @abstractmethod
-    def execute_sql(self, query: str, params: Optional[List[Any]] = None) -> pd.DataFrame:
+    def execute_sql(self, query: str, params: Optional[List[Any]] = None) -> Any:
         """
         Execute SQL query and return a pandas DataFrame with the results.
         
@@ -464,7 +461,7 @@ class SqliteEngine(Engine[sqlite3.Connection]):
         
         return result[0][0]
 
-    def execute_sql(self, query: str, params: Optional[List[Any]] = None) -> pd.DataFrame:
+    def execute_sql(self, query: str, params: Optional[List[Any]] = None) -> Any:
         from xetrack._dataframe import cursor_to_dataframe
 
         cursor = self.execute(query, params)

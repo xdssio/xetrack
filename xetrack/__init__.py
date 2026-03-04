@@ -12,7 +12,9 @@ try:
 except ImportError:
     pass
 
-__all__ = ['Reader', 'Tracker', 'copy']
+from xetrack._dataframe import get_backend, set_backend  # noqa: F401
+
+__all__ = ['Reader', 'Tracker', 'copy', 'get_backend', 'set_backend']
 
 
 def __getattr__(name: str):

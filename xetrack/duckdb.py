@@ -2,13 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Optional, List, Dict, TYPE_CHECKING
+from typing import Any, Optional, List, Dict
 from xetrack.engine import Engine
 from xetrack.config import SCHEMA_PARAMS, CONSTANTS, TRACKER_CONSTANTS
 import duckdb
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 
 logger = logging.getLogger(__name__)
@@ -288,7 +285,7 @@ class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
         
         return result[0][0]
 
-    def execute_sql(self, query: str, params: Optional[List[Any]] = None) -> pd.DataFrame:
+    def execute_sql(self, query: str, params: Optional[List[Any]] = None) -> Any:
         """
         Execute SQL query and return a DataFrame with the results.
 
