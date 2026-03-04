@@ -290,18 +290,19 @@ class DuckDBEngine(Engine[duckdb.DuckDBPyConnection]):
 
     def execute_sql(self, query: str, params: Optional[List[Any]] = None) -> pd.DataFrame:
         """
-        Execute SQL query and return a pandas DataFrame with the results.
-        
+        Execute SQL query and return a DataFrame with the results.
+
         Args:
             query: The SQL query to execute
             params: Optional parameters for the query
-            
+
         Returns:
-            pandas.DataFrame: A DataFrame containing the query results
+            A pandas or polars DataFrame containing the query results
         """
+        from xetrack._dataframe import cursor_to_dataframe
+
         result = self.execute(query, params)
-        # DuckDB has native support for converting results to a DataFrame
-        return result.df()
+        return cursor_to_dataframe(result)
 
     def close(self) -> None:
         if self.conn:

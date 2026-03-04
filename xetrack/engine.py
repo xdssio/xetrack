@@ -465,13 +465,10 @@ class SqliteEngine(Engine[sqlite3.Connection]):
         return result[0][0]
 
     def execute_sql(self, query: str, params: Optional[List[Any]] = None) -> pd.DataFrame:
-        import pandas as pd
+        from xetrack._dataframe import cursor_to_dataframe
 
         cursor = self.execute(query, params)
-
-        columns = [col[0] for col in cursor.description] if cursor.description else []
-        rows = cursor.fetchall()
-        return pd.DataFrame.from_records(rows, columns=columns)
+        return cursor_to_dataframe(cursor)
     
     def close(self) -> None:
         if self.conn:
