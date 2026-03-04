@@ -158,7 +158,8 @@ def _copy_table_events(
     column_info = source_tracker.engine.execute_sql(
         f"PRAGMA table_info({source_tracker.engine.table_name})"
     )
-    columns = [row['name'] for row in column_info.to_dict('records')]
+    from xetrack._dataframe import df_to_dict_records
+    columns = [row['name'] for row in df_to_dict_records(column_info)]
 
     # Find indices for timestamp and track_id
     timestamp_idx = columns.index(TRACKER_CONSTANTS.TIMESTAMP)

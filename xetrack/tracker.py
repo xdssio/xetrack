@@ -1074,7 +1074,9 @@ class Tracker:
             self.engine.conn.close()
 
     def to_csv(self, path: str, all: bool = False):
-        return self.to_df(all).to_csv(path, index=False)
+        from xetrack._dataframe import df_to_csv
+        df_to_csv(self.to_df(all), path)
 
     def to_parquet(self, path: str, all: bool = False):
-        return self.to_df(all).to_parquet(path, index=False)
+        from xetrack._dataframe import df_to_parquet
+        df_to_parquet(self.to_df(all), path)

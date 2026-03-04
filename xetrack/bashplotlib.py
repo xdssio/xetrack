@@ -6,16 +6,24 @@ from bashplotlib.scatterplot import plot_scatter as bashplot_scatter
 
 
 def _to_csv(db: str, columns: list[str], path: str) -> str:
-    from pandas.api.types import is_float_dtype
+    from xetrack._dataframe import (
+        df_column_is_float, df_columns, df_select_columns, df_to_dict_records,
+    )
 
     df = Reader(db).to_df()
     for column in columns:
-        if column not in df.columns:
+        if column not in df_columns(df):
             raise ValueError(f"Column {column} not in the database")
-        if not is_float_dtype(df[column]):
+        if not df_column_is_float(df, column):
             raise ValueError(f"Column {column} is not a float type")
 
-    df[columns].to_csv(path, index=False, header=False)
+    # Write CSV without headers (required by bashplotlib)
+    import csv
+    selected = df_select_columns(df, columns)
+    with open(path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        for row in df_to_dict_records(selected):
+            writer.writerow([row[c] for c in columns])
     return path
 
 

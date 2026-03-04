@@ -182,7 +182,8 @@ class Logger:
             for row in data:
                 self.monitor(row)
         else:
-            data = data.to_dict(orient="records")  # type: ignore
+            from xetrack._dataframe import df_to_dict_records
+            data = df_to_dict_records(data)
             for row in data:
                 self.monitor(row)  # type: ignore
 
