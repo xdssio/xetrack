@@ -4,6 +4,11 @@ Provides a thin layer that returns either pandas or polars DataFrames
 based on what's installed. Pandas is preferred when both are available
 for backward compatibility.
 
+Creation functions (cursor_to_dataframe, dataframe_from_dicts, empty_dataframe)
+use the configured backend. Operation functions (df_sort, df_filter_eq, etc.)
+dispatch on the actual DataFrame type so they work correctly even if the
+backend setting changes between creation and use.
+
 Usage:
     from xetrack._dataframe import get_backend, set_backend, cursor_to_dataframe
 
@@ -16,12 +21,13 @@ Usage:
 """
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Any, List, Optional
 
 PANDAS = "pandas"
 POLARS = "polars"
 
-_BACKEND: Optional[str] = None
+_BACKEND: ContextVar[Optional[str]] = ContextVar("_BACKEND", default=None)
 
 
 def _detect_backend() -> str:
@@ -52,10 +58,11 @@ def _detect_backend() -> str:
 
 def get_backend() -> str:
     """Get the current DataFrame backend (PANDAS or POLARS)."""
-    global _BACKEND
-    if _BACKEND is None:
-        _BACKEND = _detect_backend()
-    return _BACKEND
+    backend = _BACKEND.get()
+    if backend is None:
+        backend = _detect_backend()
+        _BACKEND.set(backend)
+    return backend
 
 
 def set_backend(backend: str) -> None:
@@ -64,14 +71,32 @@ def set_backend(backend: str) -> None:
     Args:
         backend: POLARS, PANDAS, or 'auto' to re-detect.
     """
-    global _BACKEND
     if backend == "auto":
-        _BACKEND = _detect_backend()
+        _BACKEND.set(_detect_backend())
     elif backend in (POLARS, PANDAS):
-        _BACKEND = backend
+        _BACKEND.set(backend)
     else:
         raise ValueError(f"Unknown backend: {backend!r}. Use 'polars', 'pandas', or 'auto'.")
 
+
+def _is_polars(df: Any) -> bool:
+    """Check if a DataFrame/Series is a polars object by module name.
+
+    Uses module inspection instead of isinstance to avoid importing polars
+    when it may not be installed.
+
+    Args:
+        df: A DataFrame or Series object.
+
+    Returns:
+        True if the object is from the polars library.
+    """
+    return type(df).__module__.startswith("polars")
+
+
+# ---------------------------------------------------------------------------
+# Creation functions — use get_backend() to decide which library to use
+# ---------------------------------------------------------------------------
 
 def cursor_to_dataframe(cursor: Any) -> Any:
     """Convert a database cursor result to a DataFrame.
@@ -92,7 +117,7 @@ def cursor_to_dataframe(cursor: Any) -> Any:
         columns = [col[0] for col in cursor.description] if cursor.description else []
         rows = cursor.fetchall()
         if not rows:
-            return pl.DataFrame(schema={col: pl.Utf8 for col in columns})
+            return pl.DataFrame(schema=columns)
         return pl.DataFrame(rows, schema=columns, orient="row")
     else:
         import pandas as pd
@@ -132,12 +157,16 @@ def empty_dataframe(columns: Optional[List[str]] = None) -> Any:
     if get_backend() == POLARS:
         import polars as pl
         if columns:
-            return pl.DataFrame(schema={col: pl.Utf8 for col in columns})
+            return pl.DataFrame(schema=columns)
         return pl.DataFrame()
     else:
         import pandas as pd
         return pd.DataFrame(columns=columns)
 
+
+# ---------------------------------------------------------------------------
+# Operation functions — dispatch on actual DataFrame type via _is_polars()
+# ---------------------------------------------------------------------------
 
 def df_sort(df: Any, by: str | list[str]) -> Any:
     """Sort a DataFrame by column(s).
@@ -149,7 +178,7 @@ def df_sort(df: Any, by: str | list[str]) -> Any:
     Returns:
         Sorted DataFrame.
     """
-    if get_backend() == POLARS:
+    if _is_polars(df):
         return df.sort(by)
     return df.sort_values(by=by)
 
@@ -163,7 +192,7 @@ def df_to_dict_records(df: Any) -> list[dict]:
     Returns:
         List of row dictionaries.
     """
-    if get_backend() == POLARS:
+    if _is_polars(df):
         return df.to_dicts()
     return df.to_dict(orient='records')
 
@@ -177,14 +206,14 @@ def df_to_markdown(df: Any) -> str:
     Returns:
         Markdown-formatted table string.
     """
-    if get_backend() == POLARS:
+    if _is_polars(df):
         from tabulate import tabulate
         # Handle both DataFrame and Series
         if hasattr(df, 'to_dicts'):
             return tabulate(df.to_dicts(), headers="keys", tablefmt="pipe")
         # Polars Series — convert to DataFrame first
         return tabulate(df.to_frame().to_dicts(), headers="keys", tablefmt="pipe")
-    return df.to_markdown()
+    return df.to_markdown(index=False)
 
 
 def df_to_csv(df: Any, path: str) -> None:
@@ -194,7 +223,7 @@ def df_to_csv(df: Any, path: str) -> None:
         df: A pandas or polars DataFrame.
         path: Output file path.
     """
-    if get_backend() == POLARS:
+    if _is_polars(df):
         df.write_csv(path)
     else:
         df.to_csv(path, index=False)
@@ -207,7 +236,7 @@ def df_to_parquet(df: Any, path: str) -> None:
         df: A pandas or polars DataFrame.
         path: Output file path.
     """
-    if get_backend() == POLARS:
+    if _is_polars(df):
         df.write_parquet(path)
     else:
         df.to_parquet(path, index=False)
@@ -222,9 +251,7 @@ def df_is_empty(df: Any) -> bool:
     Returns:
         True if the DataFrame has no rows.
     """
-    if get_backend() == POLARS:
-        return len(df) == 0
-    return df.empty
+    return len(df) == 0
 
 
 def df_columns(df: Any) -> list[str]:
@@ -236,7 +263,7 @@ def df_columns(df: Any) -> list[str]:
     Returns:
         List of column names.
     """
-    if get_backend() == POLARS:
+    if _is_polars(df):
         return df.columns
     return df.columns.tolist()
 
@@ -252,7 +279,7 @@ def df_filter_eq(df: Any, column: str, value: Any) -> Any:
     Returns:
         Filtered DataFrame.
     """
-    if get_backend() == POLARS:
+    if _is_polars(df):
         import polars as pl
         return df.filter(pl.col(column) == value)
     return df[df[column] == value]
@@ -267,7 +294,7 @@ def df_dropna_all(df: Any) -> Any:
     Returns:
         DataFrame with all-null rows removed.
     """
-    if get_backend() == POLARS:
+    if _is_polars(df):
         import polars as pl
         return df.filter(~pl.all_horizontal(pl.all().is_null()))
     return df.dropna(how='all')
@@ -283,7 +310,7 @@ def df_column_is_float(df: Any, column: str) -> bool:
     Returns:
         True if the column dtype is float.
     """
-    if get_backend() == POLARS:
+    if _is_polars(df):
         import polars as pl
         return df[column].dtype in (pl.Float32, pl.Float64)
     else:
@@ -292,7 +319,7 @@ def df_column_is_float(df: Any, column: str) -> bool:
 
 
 def df_unique_series(df: Any, column: str) -> Any:
-    """Get unique values of a column as a Series.
+    """Get unique values of a column as a Series with stable ordering.
 
     Args:
         df: A pandas or polars DataFrame.
@@ -301,8 +328,8 @@ def df_unique_series(df: Any, column: str) -> Any:
     Returns:
         A pandas Series or polars Series with unique values.
     """
-    if get_backend() == POLARS:
-        return df[column].unique()
+    if _is_polars(df):
+        return df[column].unique(maintain_order=True)
     else:
         import pandas as pd
         return pd.Series(df[column].unique(), name=column)
@@ -330,7 +357,7 @@ def df_row_to_dict(df: Any, index: int) -> dict:
     Returns:
         Dictionary of column names to values.
     """
-    if get_backend() == POLARS:
+    if _is_polars(df):
         return df.row(index, named=True)
     return df.iloc[index].to_dict()
 
@@ -355,6 +382,6 @@ def df_select_columns(df: Any, columns: list[str]) -> Any:
     Returns:
         DataFrame with only the selected columns.
     """
-    if get_backend() == POLARS:
+    if _is_polars(df):
         return df.select(columns)
     return df[columns]
