@@ -1001,61 +1001,30 @@ class Tracker:
         return self.head().__repr__()
 
     def to_df(self, all: bool = False):
+        from xetrack._dataframe import cursor_to_dataframe
+
         query = f"SELECT * FROM {self.engine.table_name}"
         if not all:
             query += f" WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
             cursor = self.engine.execute(query, [self.track_id])
         else:
             cursor = self.engine.execute(query)
-            
-        # For SQLite connections, convert cursor results to pandas DataFrame
-        # since SQLite cursor doesn't have a df() method like DuckDB
-        if hasattr(cursor, 'df'):
-            return cursor.df()
-        else:
-            import pandas as pd
-            # Get column names from cursor description
-            columns = [col[0] for col in cursor.description] if cursor.description else []
-            # Fetch all rows
-            rows = cursor.fetchall()
-            # Convert to DataFrame
-            return pd.DataFrame.from_records(rows, columns=columns)
+
+        return cursor_to_dataframe(cursor)
 
     def __getitem__(self, item: Union[str, int]) -> Any:
+        from xetrack._dataframe import cursor_to_dataframe, df_row_to_dict
+
         if isinstance(item, str):
             query = f"SELECT {item} FROM {self.engine.table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ?"
             cursor = self.engine.execute(query, [self.track_id])
-            
-            # Convert cursor results to a DataFrame
-            if hasattr(cursor, 'df'):
-                return cursor.df()[item]
-            else:
-                import pandas as pd
-                # Get column names from cursor description
-                columns = [col[0] for col in cursor.description] if cursor.description else []
-                # Fetch all rows
-                rows = cursor.fetchall()
-                # Convert to DataFrame
-                df = pd.DataFrame.from_records(rows, columns=columns)
-                return df[item]
-            
+            return cursor_to_dataframe(cursor)[item]
+
         elif isinstance(item, int):
             query = f"SELECT * FROM {self.engine.table_name} LIMIT 1 OFFSET ?"
             cursor = self.engine.execute(query, [item-1])
-            
-            # Convert cursor results to a DataFrame
-            if hasattr(cursor, 'df'):
-                results = cursor.df()
-            else:
-                import pandas as pd
-                # Get column names from cursor description
-                columns = [col[0] for col in cursor.description] if cursor.description else []
-                # Fetch all rows
-                rows = cursor.fetchall()
-                # Convert to DataFrame
-                results = pd.DataFrame.from_records(rows, columns=columns)
-            
-            return None if len(results) == 0 else results.iloc[0].to_dict()
+            results = cursor_to_dataframe(cursor)
+            return None if len(results) == 0 else df_row_to_dict(results, 0)
         raise ValueError(f"Invalid type: {type(item)}")
 
     def set_params(self, params: Dict[str, Any]):
@@ -1069,36 +1038,18 @@ class Tracker:
             self.set_param(key, value)
 
     def head(self, n: int = 5):
+        from xetrack._dataframe import cursor_to_dataframe
+
         query = f"SELECT * FROM {self.engine.table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ? LIMIT ?"
         cursor = self.engine.execute(query, [self.track_id, n])
-        
-        # Convert cursor results to a DataFrame
-        if hasattr(cursor, 'df'):
-            return cursor.df()
-        else:
-            import pandas as pd
-            # Get column names from cursor description
-            columns = [col[0] for col in cursor.description] if cursor.description else []
-            # Fetch all rows
-            rows = cursor.fetchall()
-            # Convert to DataFrame
-            return pd.DataFrame.from_records(rows, columns=columns)
+        return cursor_to_dataframe(cursor)
 
     def tail(self, n: int = 5):
+        from xetrack._dataframe import cursor_to_dataframe
+
         query = f"SELECT * FROM {self.engine.table_name} WHERE {SCHEMA_PARAMS.TRACK_ID} = ? ORDER BY {TRACKER_CONSTANTS.TIMESTAMP} DESC LIMIT ?"
         cursor = self.engine.execute(query, [self.track_id, n])
-        
-        # Convert cursor results to a DataFrame
-        if hasattr(cursor, 'df'):
-            return cursor.df()
-        else:
-            import pandas as pd
-            # Get column names from cursor description
-            columns = [col[0] for col in cursor.description] if cursor.description else []
-            # Fetch all rows
-            rows = cursor.fetchall()
-            # Convert to DataFrame
-            return pd.DataFrame.from_records(rows, columns=columns)
+        return cursor_to_dataframe(cursor)
 
     def count_all(self):
         """
