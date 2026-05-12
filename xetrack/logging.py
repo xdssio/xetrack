@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import sys
-from xetrack._json import dumps as json_dumps, loads as json_loads
-import orjson
+from xetrack._json import dumps as json_dumps, loads as json_loads, JSONDecodeError
 import os
 from typing import Dict, List, Optional, Union, Any
 import re
@@ -135,7 +134,7 @@ class Logger:
                 data = json_loads(message)
             else:
                 data = {"message": message}
-        except (orjson.JSONDecodeError, AttributeError):
+        except (JSONDecodeError, AttributeError):
             data = {"message": str(message)}
 
         # Create flattened JSONL entry
@@ -157,7 +156,7 @@ class Logger:
         return json_dumps(jsonl_entry) + "\n"
 
     def experiment(self, params: Dict[str, Any]):
-        self.log(params, LOGURU_PARAMS.EXPERIMENT, indent=4)
+        self.log(params, LOGURU_PARAMS.EXPERIMENT, indent=2)
 
     def track(self, data: Union[Dict[str, Any], Any, List[Dict[str, Any]]]):
         return self.log(data, LOGURU_PARAMS.TRACKING)
@@ -250,7 +249,7 @@ class Logger:
                         try:
                             data = json_loads(json_string)
                             data_list.append(data)
-                        except orjson.JSONDecodeError:
+                        except JSONDecodeError:
                             pass
                         json_string = ""
 
@@ -267,7 +266,7 @@ class Logger:
                 try:
                     data = json_loads(json_string)
                     data_list.append(data)
-                except orjson.JSONDecodeError:
+                except JSONDecodeError:
                     pass
         return data_list
 
