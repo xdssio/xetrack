@@ -2,7 +2,7 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 from xetrack.cli import app
 from typer.testing import CliRunner
 from xetrack import Reader, Tracker
-import json
+from xetrack._json import loads as json_loads
 import cloudpickle
 import pandas as pd
 runner = CliRunner()
@@ -24,7 +24,7 @@ def test_cli_head():
     assert 'timestamp' in result.output and 'track_id' in result.output and 'i' in result.output
 
     result = runner.invoke(app, args=['head', db1, '--json'])
-    assert 'timestamp' in json.loads(result.output)[0]
+    assert 'timestamp' in json_loads(result.output)[0]
 
 
 def test_cli_tail():
@@ -39,7 +39,7 @@ def test_cli_tail():
     assert 'timestamp' in result.output and 'track_id' in result.output and 'i' in result.output
 
     result = runner.invoke(app, args=['tail', db1, '--json'])
-    assert 'timestamp' in json.loads(result.output)[0]
+    assert 'timestamp' in json_loads(result.output)[0]
 
 
 def test_cli_columns():
