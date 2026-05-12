@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal, Union, List
 import typer
 from xetrack import Reader, copy as copy_db
-from json import dumps
+from xetrack._json import dumps
 from xetrack._dataframe import (
     df_columns, df_describe, df_filter_eq, df_column_max, df_column_min,
     df_select_columns, df_to_dict_records, df_to_markdown, df_unique_series,
@@ -25,7 +25,7 @@ def head(db: str = typer.Argument(help='path to database'),
          table: str = typer.Option("default", help="Name of the table to read from")):
     """Show the first lines of the database events table"""
     df = Reader(db, engine=_parse_engine(engine), table=table).to_df(head=n)
-    result = dumps(df_to_dict_records(df), indent=4) if json else df_to_markdown(df)
+    result = dumps(df_to_dict_records(df), indent=2) if json else df_to_markdown(df)
     typer.echo(result)
 
 
@@ -37,7 +37,7 @@ def tail(db: str = typer.Argument(help='path to database'),
          table: str = typer.Option("default", help="Name of the table to read from")):
     """Show the last lines of the database events table"""
     df = Reader(db, engine=_parse_engine(engine), table=table).to_df(tail=n)
-    result = dumps(df_to_dict_records(df), indent=4) if json else df_to_markdown(df)
+    result = dumps(df_to_dict_records(df), indent=2) if json else df_to_markdown(df)
     typer.echo(result)
 
 

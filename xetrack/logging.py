@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-import json
+from xetrack._json import dumps as json_dumps, loads as json_loads, JSONDecodeError
 import os
 from typing import Dict, List, Optional, Union, Any
 import re
@@ -131,10 +131,10 @@ class Logger:
         # Try to parse message as JSON if it contains structured data
         try:
             if message.strip().startswith('{'):
-                data = json.loads(message)
+                data = json_loads(message)
             else:
                 data = {"message": message}
-        except (json.JSONDecodeError, AttributeError):
+        except (JSONDecodeError, AttributeError):
             data = {"message": str(message)}
 
         # Create flattened JSONL entry
@@ -153,10 +153,10 @@ class Logger:
         if record.get("extra"):
             jsonl_entry["extra"] = record["extra"]
 
-        return json.dumps(jsonl_entry) + "\n"
+        return json_dumps(jsonl_entry) + "\n"
 
     def experiment(self, params: Dict[str, Any]):
-        self.log(params, LOGURU_PARAMS.EXPERIMENT, indent=4)
+        self.log(params, LOGURU_PARAMS.EXPERIMENT, indent=2)
 
     def track(self, data: Union[Dict[str, Any], Any, List[Dict[str, Any]]]):
         return self.log(data, LOGURU_PARAMS.TRACKING)
@@ -174,7 +174,7 @@ class Logger:
     ) -> Any:
         """Create a monitoring log from a dictionary, a list of dictionaries, or a DataFrame."""
         if isinstance(data, dict):
-            self.logger.log(level, json.dumps(data, indent=indent))
+            self.logger.log(level, json_dumps(data, indent=indent))
         elif isinstance(data, list):
             for row in data:
                 self.monitor(row)
@@ -227,12 +227,12 @@ class Logger:
     ) -> Optional[Dict[str, Any]]:
         """return a relevent log entry from a structured log line"""
         if line.startswith('{"text":') and self.is_tracked_entry(line):
-            line_json = json.loads(line)
+            line_json = json_loads(line)
             log_text = line_json["text"]
             meta, text = log_text.split(LOGURU_PARAMS.DELIMITER)
             if level and level not in meta:
                 return None
-            return json.loads(text.strip())
+            return json_loads(text.strip())
 
     def read_log(self, path: str, level: Optional[str] = None) -> List[Dict[str, Any]]:
         data_list = []
@@ -247,9 +247,9 @@ class Logger:
                     # If there is an ongoing JSON string, parse it before starting a new one
                     if json_string:
                         try:
-                            data = json.loads(json_string)
+                            data = json_loads(json_string)
                             data_list.append(data)
-                        except json.JSONDecodeError:
+                        except JSONDecodeError:
                             pass
                         json_string = ""
 
@@ -264,9 +264,9 @@ class Logger:
             # Parse the last JSON string if it exists
             if json_string:
                 try:
-                    data = json.loads(json_string)
+                    data = json_loads(json_string)
                     data_list.append(data)
-                except json.JSONDecodeError:
+                except JSONDecodeError:
                     pass
         return data_list
 

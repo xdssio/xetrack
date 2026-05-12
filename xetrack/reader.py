@@ -5,6 +5,7 @@ from typing import Any, Optional, Literal
 from xetrack.engine import SqliteEngine
 from xetrack.config import SCHEMA_PARAMS
 from xetrack.logging import Logger
+from xetrack._json import loads as json_loads
 from xetrack._dataframe import (
     cursor_to_dataframe, dataframe_from_dicts, empty_dataframe,
     df_sort, df_is_empty, df_dropna_all,
@@ -166,14 +167,12 @@ class Reader:
             >>> print(df.columns)
             Index(['timestamp', 'level', 'accuracy', 'loss', ...])
         """
-        import json
-
         data = []
         with open(path, 'r') as f:
             for line in f:
                 line = line.strip()
                 if line:
-                    entry = json.loads(line)
+                    entry = json_loads(line)
                     # Entry is already flattened, use it directly
                     data.append(entry)
 
