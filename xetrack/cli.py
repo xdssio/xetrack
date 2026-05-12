@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal, Union, List
 import typer
 from xetrack import Reader, copy as copy_db
-from json import dumps
+from xetrack._json import dumps
 from xetrack._dataframe import (
     df_columns, df_describe, df_filter_eq, df_column_max, df_column_min,
     df_select_columns, df_to_dict_records, df_to_markdown, df_unique_series,
