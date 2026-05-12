@@ -166,14 +166,14 @@ class Reader:
             >>> print(df.columns)
             Index(['timestamp', 'level', 'accuracy', 'loss', ...])
         """
-        import json
+        from xetrack._json import loads as json_loads
 
         data = []
         with open(path, 'r') as f:
             for line in f:
                 line = line.strip()
                 if line:
-                    entry = json.loads(line)
+                    entry = json_loads(line)
                     # Entry is already flattened, use it directly
                     data.append(entry)
 
